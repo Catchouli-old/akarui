@@ -1,0 +1,7 @@
+x64
+/*.opendb
+/*.db
+/akarui/*.pdb
+*.filters
+*.user
+/distribute/akarui_*.zip

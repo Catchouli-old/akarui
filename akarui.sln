@@ -5,6 +5,11 @@ VisualStudioVersion = 14.0.25420.1
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "akarui", "akarui\akarui.vcxproj", "{5BD125AC-0740-403D-B9B4-2B0A10E3BEF6}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "distribute", "distribute\distribute.vcxproj", "{54826669-FA06-4323-825E-B9DF17D9A62C}"
+	ProjectSection(ProjectDependencies) = postProject
+		{5BD125AC-0740-403D-B9B4-2B0A10E3BEF6} = {5BD125AC-0740-403D-B9B4-2B0A10E3BEF6}
+	EndProjectSection
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -15,12 +20,16 @@ Global
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
 		{5BD125AC-0740-403D-B9B4-2B0A10E3BEF6}.Debug|x64.ActiveCfg = Debug|x64
 		{5BD125AC-0740-403D-B9B4-2B0A10E3BEF6}.Debug|x64.Build.0 = Debug|x64
-		{5BD125AC-0740-403D-B9B4-2B0A10E3BEF6}.Debug|x86.ActiveCfg = Debug|Win32
-		{5BD125AC-0740-403D-B9B4-2B0A10E3BEF6}.Debug|x86.Build.0 = Debug|Win32
+		{5BD125AC-0740-403D-B9B4-2B0A10E3BEF6}.Debug|x86.ActiveCfg = Release|x64
 		{5BD125AC-0740-403D-B9B4-2B0A10E3BEF6}.Release|x64.ActiveCfg = Release|x64
 		{5BD125AC-0740-403D-B9B4-2B0A10E3BEF6}.Release|x64.Build.0 = Release|x64
-		{5BD125AC-0740-403D-B9B4-2B0A10E3BEF6}.Release|x86.ActiveCfg = Release|Win32
-		{5BD125AC-0740-403D-B9B4-2B0A10E3BEF6}.Release|x86.Build.0 = Release|Win32
+		{5BD125AC-0740-403D-B9B4-2B0A10E3BEF6}.Release|x86.ActiveCfg = Release|x64
+		{54826669-FA06-4323-825E-B9DF17D9A62C}.Debug|x64.ActiveCfg = Debug|x64
+		{54826669-FA06-4323-825E-B9DF17D9A62C}.Debug|x64.Build.0 = Debug|x64
+		{54826669-FA06-4323-825E-B9DF17D9A62C}.Debug|x86.ActiveCfg = Release|x64
+		{54826669-FA06-4323-825E-B9DF17D9A62C}.Release|x64.ActiveCfg = Release|x64
+		{54826669-FA06-4323-825E-B9DF17D9A62C}.Release|x64.Build.0 = Release|x64
+		{54826669-FA06-4323-825E-B9DF17D9A62C}.Release|x86.ActiveCfg = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
