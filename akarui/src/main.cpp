@@ -8,6 +8,8 @@
 #include <fstream>
 #include <string>
 #include <sstream>
+#include "cuda_runtime.h"
+#include "cuda_gl_interop.h"
 
 void drawFullscreenQuad();
 GLuint createTexture(int width, int height);
@@ -37,6 +39,8 @@ int main(int argc, char** argv)
     data[i] = glm::vec4((i%10000)/10000.0f, 0.0f, 0.0f, 0.0f);
   }
   glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, 800, 600, 0, GL_RGBA, GL_FLOAT, data.data());
+  cudaGraphicsResource_t cudaResource;
+  cudaGraphicsGLRegisterImage(&cudaResource, tex, GL_TEXTURE_2D, cudaGraphicsRegisterFlagsWriteDiscard);
 
   // load shader
   GLuint program = compileShaderProgram("resources/shaders/textured.glsl");
@@ -56,11 +60,31 @@ int main(int argc, char** argv)
       }
     }
 
-    // draw
+    // map texture into cuda and invoke render kernel
+    cudaGraphicsMapResources(1, &cudaResource);
+    {
+      cudaArray_t cudaArray;
+      cudaGraphicsSubResourceGetMappedArray(&cudaArray, cudaResource, 0, 0);
+      cudaResourceDesc cudaArrayResourceDesc;
+      {
+        cudaArrayResourceDesc.resType = cudaResourceTypeArray;
+        cudaArrayResourceDesc.res.array.array = cudaArray;
+      }
+      cudaSurfaceObject_t cudaSurfaceObject;
+      cudaCreateSurfaceObject(&cudaSurfaceObject, &cudaArrayResourceDesc);
+      {
+        runkernel(cudaSurfaceObject);
+      }
+      cudaDestroySurfaceObject(cudaSurfaceObject);
+    }
+    cudaGraphicsUnmapResources(1, &cudaResource);
+
+    cudaStreamSynchronize(0);
+
+    // render texture to screen
     glBindTexture(GL_TEXTURE_2D, tex);
     glUseProgram(program);
     drawFullscreenQuad();
-
     SDL_GL_SwapWindow(window);
 
     // check for opengl errors
@@ -79,6 +103,14 @@ int main(int argc, char** argv)
       frames = 0;
       printf("fps: %d\n", fps);
     }
+  }
+
+  // cudaDeviceReset must be called before exiting in order for profiling and
+  // tracing tools such as Nsight and Visual Profiler to show complete traces.
+  cudaError_t cudaStatus = cudaDeviceReset();
+  if (cudaStatus != cudaSuccess) {
+      fprintf(stderr, "cudaDeviceReset failed!");
+      return 1;
   }
 
   // Clean up SDL

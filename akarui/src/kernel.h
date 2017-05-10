@@ -1,3 +1,3 @@
 #pragma once
 
-int runkernel();
+int runkernel(unsigned long long);
