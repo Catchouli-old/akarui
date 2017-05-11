@@ -3,6 +3,7 @@
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_opengl.h>
 #include <glm/glm.hpp>
+#include <tclap/CmdLine.h>
 #include "kernel.h"
 #include <vector>
 #include <fstream>
@@ -17,6 +18,11 @@ GLuint compileShaderProgram(const char* filename);
 
 int main(int argc, char** argv)
 {
+  TCLAP::CmdLine cmd("akarui", ' ', "0.0");
+  TCLAP::ValueArg<bool> vsync("v", "vsync", "Whether to run with vsync on or off", false, true, "bool");
+  cmd.add(vsync);
+  cmd.parse(argc, argv);
+
   // initialise SDL
   SDL_Init(SDL_INIT_VIDEO);
   SDL_Window* window;
@@ -28,6 +34,7 @@ int main(int argc, char** argv)
 
   // initialise opengl
   SDL_GL_CreateContext(window);
+  SDL_GL_SetSwapInterval(vsync.getValue() ? 1 : 0);
   glewInit();
 
   // create an opengl texture
