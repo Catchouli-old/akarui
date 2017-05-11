@@ -1,3 +1,3 @@
 #pragma once
 
-int runkernel(unsigned long long, dim3 screen_res);
+cudaError_t renderScreen(cudaSurfaceObject_t surface, dim3 screenRes, float time);

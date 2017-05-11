@@ -83,7 +83,11 @@ int main(int argc, char** argv)
       cudaSurfaceObject_t cudaSurfaceObject;
       cudaCreateSurfaceObject(&cudaSurfaceObject, &cudaArrayResourceDesc);
       {
-        runkernel(cudaSurfaceObject, screen_res);
+        cudaError_t cudaStatus = renderScreen(cudaSurfaceObject, screen_res, SDL_GetTicks() / 1000.0f);
+        if (cudaStatus != cudaSuccess) {
+            fprintf(stderr, "renderScreen failed!");
+            return 1;
+        }
       }
       cudaDestroySurfaceObject(cudaSurfaceObject);
     }
