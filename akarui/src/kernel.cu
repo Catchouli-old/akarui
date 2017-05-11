@@ -4,22 +4,25 @@
 #include "cuda_device_runtime_api.h"
 
 #include <stdio.h>
+#include <math.h>
 
-cudaError_t renderScreen(cudaSurfaceObject_t);
+cudaError_t renderScreen(cudaSurfaceObject_t, dim3 screen_res);
 
-__global__ void renderPixel(cudaSurfaceObject_t surface)
+__global__ void renderPixel(cudaSurfaceObject_t surface, dim3 screenRes, dim3 blockSize)
 {
-    int x = blockIdx.x;
-    int y = blockIdx.y;
+    int x = blockIdx.x * blockSize.x + threadIdx.x;
+    int y = blockIdx.y * blockSize.y + threadIdx.y;
     //if (y != 0)
     //printf("running thread %d %d\n", x, y);
-    surf2Dwrite(float4{x/(800.0f*600.0f), x/800.0f, y/600.0f, 0.0f}, surface, x * 4 * sizeof(float), y);
+    float4 pixel = {x/float(screenRes.x*screenRes.y), x/float(screenRes.x), y/float(screenRes.y), 0.0f};
+    if (x < screenRes.x && y < screenRes.y)
+      surf2Dwrite(pixel, surface, x * 4 * sizeof(float), y);
 }
 
-int runkernel(cudaSurfaceObject_t cudaSurfaceObject)
+int runkernel(cudaSurfaceObject_t cudaSurfaceObject, dim3 screen_res)
 {
   // Add vectors in parallel.
-  cudaError_t cudaStatus = renderScreen(cudaSurfaceObject);
+  cudaError_t cudaStatus = renderScreen(cudaSurfaceObject, screen_res);
   if (cudaStatus != cudaSuccess) {
       fprintf(stderr, "renderScreen failed!");
       return 1;
@@ -28,19 +31,25 @@ int runkernel(cudaSurfaceObject_t cudaSurfaceObject)
   return 0;
 }
 
-cudaError_t renderScreen(cudaSurfaceObject_t surface)
+cudaError_t renderScreen(cudaSurfaceObject_t surface, dim3 screenRes)
 {
     cudaError_t cudaStatus = cudaSuccess;
 
     // calculate occupancy
-    int blockSize, minGridSize;
+    int recBlockSize, minGridSize;
 
-    cudaOccupancyMaxPotentialBlockSize(&minGridSize, &blockSize, renderPixel, 0, 0);
+    cudaOccupancyMaxPotentialBlockSize(&minGridSize, &recBlockSize, renderPixel, 0, 0);
 
-    // Launch a kernel on the GPU with one thread for each element.
-    dim3 dimBlock(1, 1);
-    dim3 dimGrid(800, 600);
-    renderPixel<<<dimGrid, dimBlock>>>(surface);
+    // Convert block size to 2d
+    dim3 blockSize(1, recBlockSize);
+    while (blockSize.x < blockSize.y) {
+      blockSize.x *= 2;
+      blockSize.y /= 2;
+    }
+
+    dim3 gridSize(int(ceil(screenRes.x/float(blockSize.x))), int(ceil(screenRes.y/float(blockSize.y))));
+
+    renderPixel<<<gridSize, blockSize>>>(surface, screenRes, blockSize);
 
     //// Check for any errors launching the kernel
     cudaStatus = cudaGetLastError();

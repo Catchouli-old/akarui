@@ -4,13 +4,13 @@
 #include <SDL2/SDL_opengl.h>
 #include <glm/glm.hpp>
 #include <tclap/CmdLine.h>
-#include "kernel.h"
 #include <vector>
 #include <fstream>
 #include <string>
 #include <sstream>
 #include "cuda_runtime.h"
 #include "cuda_gl_interop.h"
+#include "kernel.h"
 
 void drawFullscreenQuad();
 GLuint createTexture(int width, int height);
@@ -23,11 +23,14 @@ int main(int argc, char** argv)
   cmd.add(vsync);
   cmd.parse(argc, argv);
 
+  // Screen res
+  dim3 screen_res(1920, 1080);
+
   // initialise SDL
   SDL_Init(SDL_INIT_VIDEO);
   SDL_Window* window;
   SDL_Renderer* renderer;
-  if (SDL_CreateWindowAndRenderer(800, 600, SDL_WINDOW_OPENGL, &window, &renderer) != 0) {
+  if (SDL_CreateWindowAndRenderer(screen_res.x, screen_res.y, SDL_WINDOW_OPENGL, &window, &renderer) != 0) {
     fprintf(stderr, "Failed to create window");
     return 1;
   }
@@ -38,14 +41,14 @@ int main(int argc, char** argv)
   glewInit();
 
   // create an opengl texture
-  GLuint tex = createTexture(800, 600);
+  GLuint tex = createTexture(screen_res.x, screen_res.y);
   glBindTexture(GL_TEXTURE_2D, tex);
   std::vector<glm::vec4> data;
-  data.resize(800 * 600);
-  for (int i = 0; i < 800 * 600; ++i) {
+  data.resize(screen_res.x * screen_res.y);
+  for (unsigned int i = 0; i < screen_res.x * screen_res.y; ++i) {
     data[i] = glm::vec4((i%10000)/10000.0f, 0.0f, 0.0f, 0.0f);
   }
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, 800, 600, 0, GL_RGBA, GL_FLOAT, data.data());
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, screen_res.x, screen_res.y, 0, GL_RGBA, GL_FLOAT, data.data());
   cudaGraphicsResource_t cudaResource;
   cudaGraphicsGLRegisterImage(&cudaResource, tex, GL_TEXTURE_2D, cudaGraphicsRegisterFlagsWriteDiscard);
 
@@ -80,7 +83,7 @@ int main(int argc, char** argv)
       cudaSurfaceObject_t cudaSurfaceObject;
       cudaCreateSurfaceObject(&cudaSurfaceObject, &cudaArrayResourceDesc);
       {
-        runkernel(cudaSurfaceObject);
+        runkernel(cudaSurfaceObject, screen_res);
       }
       cudaDestroySurfaceObject(cudaSurfaceObject);
     }

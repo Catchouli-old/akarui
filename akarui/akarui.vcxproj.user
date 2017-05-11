@@ -4,14 +4,12 @@
     <LocalDebuggerWorkingDirectory>$(SolutionDir)dist</LocalDebuggerWorkingDirectory>
     <LocalDebuggerEnvironment>PATH=%PATH%;$(SolutionDir)dependencies\bin</LocalDebuggerEnvironment>
     <DebuggerFlavor>WindowsLocalDebugger</DebuggerFlavor>
-    <LocalDebuggerCommandArguments>
-    </LocalDebuggerCommandArguments>
+    <LocalDebuggerCommandArguments>-v 0</LocalDebuggerCommandArguments>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <LocalDebuggerWorkingDirectory>$(SolutionDir)dist</LocalDebuggerWorkingDirectory>
     <LocalDebuggerEnvironment>PATH=%PATH%;$(SolutionDir)dependencies\bin</LocalDebuggerEnvironment>
     <DebuggerFlavor>WindowsLocalDebugger</DebuggerFlavor>
-    <LocalDebuggerCommandArguments>
-    </LocalDebuggerCommandArguments>
+    <LocalDebuggerCommandArguments>-v 0</LocalDebuggerCommandArguments>
   </PropertyGroup>
 </Project>
