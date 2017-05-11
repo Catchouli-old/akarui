@@ -3,6 +3,5 @@ x64
 /*.db
 /akarui/*.pdb
 *.filters
-*.user
 /distribute/akarui_*.zip
 /.vs
