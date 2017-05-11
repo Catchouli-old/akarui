@@ -24,7 +24,7 @@ int main(int argc, char** argv)
   cmd.parse(argc, argv);
 
   // Screen res
-  dim3 screen_res(1920, 1080);
+  dim3 screen_res(800, 600);
 
   // initialise SDL
   SDL_Init(SDL_INIT_VIDEO);
