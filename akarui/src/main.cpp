@@ -3,6 +3,7 @@
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_opengl.h>
 #include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 #include <tclap/CmdLine.h>
 #include <vector>
 #include <fstream>
@@ -32,13 +33,24 @@ int main(int argc, char** argv)
   std::vector<tinyobj::material_t> materials;
 
   std::string err;
-  if (!tinyobj::LoadObj(&vertexAttribs, &shapes, &materials, &err, "teapot.obj") || !err.empty()) {
-    fprintf(stderr, "Failed to load teapot.obj: %s\n", err.c_str());
-    return 1;
+  const char* model = "resources/cornell-box/CornellBox-Original.obj";
+  if (!tinyobj::LoadObj(&vertexAttribs, &shapes, &materials, &err, model) || !err.empty()) {
+    fprintf(stderr, "Failed to load %s: %s\n", model, err.c_str());
   }
 
+  if (vertexAttribs.texcoords.size() < vertexAttribs.vertices.size())
+    vertexAttribs.texcoords.resize(vertexAttribs.vertices.size(), 0.0f);
+
+  // build object transform
+  glm::mat4 m(1.0f);
+  m = glm::rotate(m, 3.14159f, glm::vec3(0.0f, 1.0f, 0.0f));
+
+  // convert to mesh_t
+  mesh_t mesh;
+
   // convert to just a plain vertex array with no indices
-  std::vector<glm::vec3> verts;
+  std::vector<glm::vec3> pos;
+  std::vector<glm::vec3> uvs;
   for (auto shape = shapes.begin(); shape != shapes.end(); ++shape) {
     int idx = 0;
     for (auto face = shape->mesh.num_face_vertices.begin(); face != shape->mesh.num_face_vertices.end(); ++face) {
@@ -47,13 +59,28 @@ int main(int argc, char** argv)
         int a = shape->mesh.indices[idx+0].vertex_index;
         int b = shape->mesh.indices[idx+1].vertex_index;
         int c = shape->mesh.indices[idx+2].vertex_index;
-        verts.push_back(glm::vec3(vertexAttribs.vertices[a*3], vertexAttribs.vertices[a*3+1], vertexAttribs.vertices[a*3+2]));
-        verts.push_back(glm::vec3(vertexAttribs.vertices[b*3], vertexAttribs.vertices[b*3+1], vertexAttribs.vertices[b*3+2]));
-        verts.push_back(glm::vec3(vertexAttribs.vertices[c*3], vertexAttribs.vertices[c*3+1], vertexAttribs.vertices[c*3+2]));
+        pos.push_back(glm::mat3(m) * glm::vec3(vertexAttribs.vertices[a*3], vertexAttribs.vertices[a*3+1], vertexAttribs.vertices[a*3+2]));
+        pos.push_back(glm::mat3(m) * glm::vec3(vertexAttribs.vertices[b*3], vertexAttribs.vertices[b*3+1], vertexAttribs.vertices[b*3+2]));
+        pos.push_back(glm::mat3(m) * glm::vec3(vertexAttribs.vertices[c*3], vertexAttribs.vertices[c*3+1], vertexAttribs.vertices[c*3+2]));
+        uvs.push_back(glm::vec3(vertexAttribs.texcoords[c*3], vertexAttribs.texcoords[c*3+1], vertexAttribs.texcoords[c*3+2]));
+        uvs.push_back(glm::vec3(vertexAttribs.texcoords[a*3], vertexAttribs.texcoords[a*3+1], vertexAttribs.texcoords[a*3+2]));
+        uvs.push_back(glm::vec3(vertexAttribs.texcoords[b*3], vertexAttribs.texcoords[b*3+1], vertexAttribs.texcoords[b*3+2]));
       }
       idx += faceVerts;
     }
   }
+  if (pos.size() != uvs.size()) {
+    fprintf(stderr, "uv count mismatched, padding\n");
+    uvs.resize(pos.size());
+  }
+
+  mesh.vertexCount = (int)pos.size();
+  mesh.vertices = (glm::vec3*)malloc(sizeof(glm::vec3) * pos.size());
+  memcpy(mesh.vertices, pos.data(), pos.size() * sizeof(glm::vec3));
+  mesh.texCoords = (glm::vec3*)malloc(sizeof(glm::vec3) * uvs.size());
+  memcpy(mesh.texCoords, uvs.data(), uvs.size() * sizeof(glm::vec3));
+
+  mesh_t* devMesh = uploadMesh(&mesh);
 
   // screen res
   dim3 screen_res(800, 600);
@@ -66,6 +93,7 @@ int main(int argc, char** argv)
     fprintf(stderr, "Failed to create window");
     return 1;
   }
+  SDL_SetRelativeMouseMode(SDL_TRUE);
 
   // initialise opengl
   SDL_GL_CreateContext(window);
@@ -92,10 +120,9 @@ int main(int argc, char** argv)
   int fps = 0;
   uint32_t lastUpdate = SDL_GetTicks();
 
-  // allocate vertex buffer on gpu
-  glm::vec3* vertexBuf;
-  cudaMalloc(&vertexBuf, verts.size() * sizeof(glm::vec3));
-  cudaMemcpy(vertexBuf, verts.data(), verts.size() * sizeof(glm::vec3), cudaMemcpyHostToDevice);
+  // camera params
+  glm::vec3 camPos(0.0f, 1.0f, -2.0f);
+  glm::vec2 camRot(0.0f);
 
   bool running = true;
   while (running) {
@@ -105,7 +132,28 @@ int main(int argc, char** argv)
       if (evt.type == SDL_QUIT || (evt.type == SDL_KEYDOWN && evt.key.keysym.scancode == SDL_SCANCODE_ESCAPE)) {
         running = false;
       }
+      else if (evt.type == SDL_MOUSEMOTION) {
+        camRot.y += (float)evt.motion.xrel;
+        camRot.x += (float)evt.motion.yrel;
+        camRot.x = glm::clamp(camRot.x, -90.0f, 90.0f);
+      }
     }
+
+    // update camera
+    const Uint8* keys = SDL_GetKeyboardState(nullptr);
+
+    glm::mat4 m(1.0f);
+    m = glm::rotate(m, 0.01f * camRot.y, glm::vec3(0.0f, 1.0f, 0.0f));
+    m = glm::rotate(m, 0.01f * camRot.x, glm::vec3(1.0f, 0.0f, 0.0f));
+
+    if (keys[SDL_SCANCODE_W])
+      camPos += 0.01f * glm::mat3(m) * glm::vec3(0.0f, 0.0f, 1.0f);
+    if (keys[SDL_SCANCODE_S])
+      camPos -= 0.01f * glm::mat3(m) * glm::vec3(0.0f, 0.0f, 1.0f);
+    if (keys[SDL_SCANCODE_A])
+      camPos -= 0.01f * glm::mat3(m) * glm::vec3(1.0f, 0.0f, 0.0f);
+    if (keys[SDL_SCANCODE_D])
+      camPos += 0.01f * glm::mat3(m) * glm::vec3(1.0f, 0.0f, 0.0f);
 
     // map texture into cuda and invoke render kernel
     cudaGraphicsMapResources(1, &cudaResource);
@@ -120,7 +168,7 @@ int main(int argc, char** argv)
       cudaSurfaceObject_t cudaSurfaceObject;
       cudaCreateSurfaceObject(&cudaSurfaceObject, &cudaArrayResourceDesc);
       {
-        cudaError_t cudaStatus = renderScreen(cudaSurfaceObject, screen_res, SDL_GetTicks() / 1000.0f, vertexBuf, verts.size());
+        cudaError_t cudaStatus = renderScreen(cudaSurfaceObject, screen_res, SDL_GetTicks() / 1000.0f, devMesh, camPos, m);
         if (cudaStatus != cudaSuccess) {
             fprintf(stderr, "renderScreen failed!");
             return 1;
