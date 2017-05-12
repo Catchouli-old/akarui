@@ -12,6 +12,9 @@
 #include "cuda_gl_interop.h"
 #include "kernel.h"
 
+#define TINYOBJLOADER_IMPLEMENTATION
+#include "tiny_obj_loader.h"
+
 void drawFullscreenQuad();
 GLuint createTexture(int width, int height);
 GLuint compileShaderProgram(const char* filename);
@@ -23,7 +26,36 @@ int main(int argc, char** argv)
   cmd.add(vsync);
   cmd.parse(argc, argv);
 
-  // Screen res
+  // load model
+  tinyobj::attrib_t vertexAttribs;
+  std::vector<tinyobj::shape_t> shapes;
+  std::vector<tinyobj::material_t> materials;
+
+  std::string err;
+  if (!tinyobj::LoadObj(&vertexAttribs, &shapes, &materials, &err, "teapot.obj") || !err.empty()) {
+    fprintf(stderr, "Failed to load teapot.obj: %s\n", err.c_str());
+    return 1;
+  }
+
+  // convert to just a plain vertex array with no indices
+  std::vector<glm::vec3> verts;
+  for (auto shape = shapes.begin(); shape != shapes.end(); ++shape) {
+    int idx = 0;
+    for (auto face = shape->mesh.num_face_vertices.begin(); face != shape->mesh.num_face_vertices.end(); ++face) {
+      int faceVerts = static_cast<int>(*face);
+      if (faceVerts == 3) {
+        int a = shape->mesh.indices[idx+0].vertex_index;
+        int b = shape->mesh.indices[idx+1].vertex_index;
+        int c = shape->mesh.indices[idx+2].vertex_index;
+        verts.push_back(glm::vec3(vertexAttribs.vertices[a*3], vertexAttribs.vertices[a*3+1], vertexAttribs.vertices[a*3+2]));
+        verts.push_back(glm::vec3(vertexAttribs.vertices[b*3], vertexAttribs.vertices[b*3+1], vertexAttribs.vertices[b*3+2]));
+        verts.push_back(glm::vec3(vertexAttribs.vertices[c*3], vertexAttribs.vertices[c*3+1], vertexAttribs.vertices[c*3+2]));
+      }
+      idx += faceVerts;
+    }
+  }
+
+  // screen res
   dim3 screen_res(800, 600);
 
   // initialise SDL
@@ -60,6 +92,11 @@ int main(int argc, char** argv)
   int fps = 0;
   uint32_t lastUpdate = SDL_GetTicks();
 
+  // allocate vertex buffer on gpu
+  glm::vec3* vertexBuf;
+  cudaMalloc(&vertexBuf, verts.size() * sizeof(glm::vec3));
+  cudaMemcpy(vertexBuf, verts.data(), verts.size() * sizeof(glm::vec3), cudaMemcpyHostToDevice);
+
   bool running = true;
   while (running) {
     // handle events
@@ -83,7 +120,7 @@ int main(int argc, char** argv)
       cudaSurfaceObject_t cudaSurfaceObject;
       cudaCreateSurfaceObject(&cudaSurfaceObject, &cudaArrayResourceDesc);
       {
-        cudaError_t cudaStatus = renderScreen(cudaSurfaceObject, screen_res, SDL_GetTicks() / 1000.0f);
+        cudaError_t cudaStatus = renderScreen(cudaSurfaceObject, screen_res, SDL_GetTicks() / 1000.0f, vertexBuf, verts.size());
         if (cudaStatus != cudaSuccess) {
             fprintf(stderr, "renderScreen failed!");
             return 1;
@@ -99,6 +136,7 @@ int main(int argc, char** argv)
     glBindTexture(GL_TEXTURE_2D, tex);
     glUseProgram(program);
     drawFullscreenQuad();
+
     SDL_GL_SwapWindow(window);
 
     // check for opengl errors
@@ -165,6 +203,10 @@ void drawFullscreenQuad()
   glVertexAttribPointer(1, 2, GL_FLOAT, false, 4 * sizeof(float), reinterpret_cast<void*>(2*sizeof(float)));
 
   glDrawArrays(GL_QUADS, 0, 4);
+
+  glBindBuffer(GL_ARRAY_BUFFER, 0);
+  glDisableVertexAttribArray(0);
+  glDisableVertexAttribArray(1);
 }
 
 GLuint createTexture(int width, int height)
