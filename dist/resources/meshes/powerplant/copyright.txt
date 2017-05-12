@@ -1,0 +1,18 @@
+University of North Carolina at Chapel Hill 1999 
+
+No commercial use of this model is allowed. This includes all commercial applications such as, 
+but not limited to, movies, games, as demo models for plotters, HUDs, virtual reality systems, etc. 
+The model is offered "as is" and neither the University of North Carolina at Chapel Hill, nor the 
+donor takes responsibility related to its use.
+
+If you use this model for any application, please let UNC know at: geom@cs.unc.edu.
+Permissions beyond the scope of this license are available at http://gamma.cs.unc.edu/POWERPLANT/#acknowledgements
+---------------------
+This distribution was created by Morgan McGuire and Guedis Cardenas
+http://graphics.cs.williams.edu/data/
+
+Downloaded from: 
+http://gamma.cs.unc.edu/POWERPLANT/#acknowledgements by section
+Each section contained subfolders with .ply files. We used MeshLab (http://meshlab.sourceforge.net/)
+to convert those PLY files into an OBJ of each section, 21 in total.
+We then merged the 21 OBJ sections into a single OBJ file and created an appropriate MTL file.
