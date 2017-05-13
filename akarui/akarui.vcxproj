@@ -15,9 +15,11 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\main.cpp" />
+    <ClCompile Include="src\tiny_obj_loader.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\kernel.h" />
+    <ClInclude Include="src\Scene.h" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <ProjectGuid>{5BD125AC-0740-403D-B9B4-2B0A10E3BEF6}</ProjectGuid>

@@ -41,7 +41,7 @@ __device__ bool intersectRayTriangle(glm::vec3 o, glm::vec3 d,
   return true;
 }
 
-__global__ void renderPixel(cudaSurfaceObject_t surface, dim3 screenRes, dim3 blockSize, float time, mesh_t* mesh, glm::vec3 camPos, glm::mat4 viewRot)
+__global__ void renderPixel(cudaSurfaceObject_t surface, dim3 screenRes, dim3 blockSize, float time, Scene* scene, glm::vec3 camPos, glm::mat4 viewRot)
 {
     int x = blockIdx.x * blockSize.x + threadIdx.x;
     int y = blockIdx.y * blockSize.y + threadIdx.y;
@@ -58,18 +58,27 @@ __global__ void renderPixel(cudaSurfaceObject_t surface, dim3 screenRes, dim3 bl
     float minT = INFINITY;
     glm::vec2 hitUV;
     int hitFace;
-    for (int i = 0; i < mesh->vertexCount/3; ++i) {
-      glm::vec3 a = mesh->vertices[i*3+0];
-      glm::vec3 b = mesh->vertices[i*3+1];
-      glm::vec3 c = mesh->vertices[i*3+2];
+    Mesh* hitMesh;
+    for (int meshIdx = 0; meshIdx < scene->meshCount; ++meshIdx) {
+      Mesh* mesh = scene->meshes[meshIdx];
+      for (int tri = 0; tri < mesh->idxCount/3; ++tri) {
+        int a = mesh->idx[tri*3];
+        int b = mesh->idx[tri*3+1];
+        int c = mesh->idx[tri*3+2];
 
-      glm::vec2 uv;
-      float t = minT;
-      intersectRayTriangle(origin, direction, a, b, c, uv, t);
-      if (t < minT && t > 0.0f) {
-        minT = t;
-        hitFace = i;
-        hitUV = uv;
+        glm::vec3 v0 = mesh->pos[a];
+        glm::vec3 v1 = mesh->pos[b];
+        glm::vec3 v2 = mesh->pos[c];
+
+        glm::vec2 uv;
+        float t = minT;
+        intersectRayTriangle(origin, direction, v0, v1, v2, uv, t);
+        if (t < minT && t > 0.0f) {
+          minT = t;
+          hitFace = tri;
+          hitUV = uv;
+          hitMesh = mesh;
+        }
       }
     }
 
@@ -77,22 +86,49 @@ __global__ void renderPixel(cudaSurfaceObject_t surface, dim3 screenRes, dim3 bl
 
     if (minT != INFINITY) {
       // we got a hit. calculate the normal
-      glm::vec3 a = mesh->vertices[hitFace*3+0];
-      glm::vec3 b = mesh->vertices[hitFace*3+1];
-      glm::vec3 c = mesh->vertices[hitFace*3+2];
-      glm::vec3 normal = glm::normalize(glm::cross(b - a, b - c));
+      int a = hitMesh->idx[hitFace*3+0];
+      int b = hitMesh->idx[hitFace*3+1];
+      int c = hitMesh->idx[hitFace*3+2];
+      glm::vec3 v0(hitMesh->pos[a]), v1(hitMesh->pos[b]), v2(hitMesh->pos[c]);
+      glm::vec3 normal = glm::normalize(glm::cross(v1 - v0, v1 - v2));
+
+      glm::vec3 hitPoint = origin + minT * direction;
+
+      // calculate lighting using a simple ambient + lambert + blinn-phong BRDF
+      const Material defaultMaterial { Material::Type_Constant
+                                     , glm::vec3(1.0f, 0.0f, 1.0f)
+                                     , glm::vec3(1.0f, 0.0f, 1.0f)
+                                     , glm::vec3(1.0f, 0.0f, 1.0f)
+                                     , 1.0f
+                                     };
+
+      const Material* mat = &defaultMaterial;
+
+      glm::vec3 light = scene->Ia;
+
+      for (int i = 0; i < scene->lightCount; ++i) {
+        Light* l = &scene->lights[i];
+
+        glm::vec3 Lm = glm::normalize(l->pos - hitPoint);
+
+        // lambert
+        light += glm::dot(normal, Lm) * l->Id * mat->Kd;
+
+        // blinn-phong
+      }
       
-      outColour = glm::vec4(normal, 1.0f);
+      outColour = glm::vec4(light, 1.0f);
     }
     else {
       outColour = glm::vec4(normalisedCoord, 0.0f, 1.0f);
+      //outColour = glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
     }
 
     if (x < screenRes.x && y < screenRes.y)
       surf2Dwrite(float4{outColour.x, outColour.y, outColour.z, outColour.w}, surface, x * 4 * sizeof(float), y);
 }
 
-cudaError_t renderScreen(cudaSurfaceObject_t surface, dim3 screenRes, float time, mesh_t* mesh, glm::vec3 camPos, glm::mat4& viewMat)
+cudaError_t renderScreen(cudaSurfaceObject_t surface, dim3 screenRes, float time, Scene* scene, glm::vec3 camPos, glm::mat4& viewMat)
 {
     cudaError_t cudaStatus = cudaSuccess;
 
@@ -110,7 +146,7 @@ cudaError_t renderScreen(cudaSurfaceObject_t surface, dim3 screenRes, float time
 
     dim3 gridSize(int(ceil(screenRes.x/float(blockSize.x))), int(ceil(screenRes.y/float(blockSize.y))));
 
-    renderPixel<<<gridSize, blockSize>>>(surface, screenRes, blockSize, time, mesh, camPos, viewMat);
+    renderPixel<<<gridSize, blockSize>>>(surface, screenRes, blockSize, time, scene, camPos, viewMat);
 
     //// Check for any errors launching the kernel
     cudaStatus = cudaGetLastError();

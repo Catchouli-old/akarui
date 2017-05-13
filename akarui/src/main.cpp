@@ -12,8 +12,8 @@
 #include "cuda_runtime.h"
 #include "cuda_gl_interop.h"
 #include "kernel.h"
+#include "Scene.h"
 
-#define TINYOBJLOADER_IMPLEMENTATION
 #include "tiny_obj_loader.h"
 
 void drawFullscreenQuad();
@@ -27,60 +27,25 @@ int main(int argc, char** argv)
   cmd.add(vsync);
   cmd.parse(argc, argv);
 
-  // load model
-  tinyobj::attrib_t vertexAttribs;
-  std::vector<tinyobj::shape_t> shapes;
-  std::vector<tinyobj::material_t> materials;
-
-  std::string err;
-  const char* model = "resources/cornell-box/CornellBox-Original.obj";
-  if (!tinyobj::LoadObj(&vertexAttribs, &shapes, &materials, &err, model) || !err.empty()) {
-    fprintf(stderr, "Failed to load %s: %s\n", model, err.c_str());
-  }
-
-  if (vertexAttribs.texcoords.size() < vertexAttribs.vertices.size())
-    vertexAttribs.texcoords.resize(vertexAttribs.vertices.size(), 0.0f);
-
   // build object transform
   glm::mat4 m(1.0f);
   m = glm::rotate(m, 3.14159f, glm::vec3(0.0f, 1.0f, 0.0f));
 
-  // convert to mesh_t
-  mesh_t mesh;
+  // load scene
+  Scene scene;
+  scene.load("resources/cornell-box/CornellBox-Original.obj", glm::mat3(m));
 
-  // convert to just a plain vertex array with no indices
-  std::vector<glm::vec3> pos;
-  std::vector<glm::vec3> uvs;
-  for (auto shape = shapes.begin(); shape != shapes.end(); ++shape) {
-    int idx = 0;
-    for (auto face = shape->mesh.num_face_vertices.begin(); face != shape->mesh.num_face_vertices.end(); ++face) {
-      int faceVerts = static_cast<int>(*face);
-      if (faceVerts == 3) {
-        int a = shape->mesh.indices[idx+0].vertex_index;
-        int b = shape->mesh.indices[idx+1].vertex_index;
-        int c = shape->mesh.indices[idx+2].vertex_index;
-        pos.push_back(glm::mat3(m) * glm::vec3(vertexAttribs.vertices[a*3], vertexAttribs.vertices[a*3+1], vertexAttribs.vertices[a*3+2]));
-        pos.push_back(glm::mat3(m) * glm::vec3(vertexAttribs.vertices[b*3], vertexAttribs.vertices[b*3+1], vertexAttribs.vertices[b*3+2]));
-        pos.push_back(glm::mat3(m) * glm::vec3(vertexAttribs.vertices[c*3], vertexAttribs.vertices[c*3+1], vertexAttribs.vertices[c*3+2]));
-        uvs.push_back(glm::vec3(vertexAttribs.texcoords[c*3], vertexAttribs.texcoords[c*3+1], vertexAttribs.texcoords[c*3+2]));
-        uvs.push_back(glm::vec3(vertexAttribs.texcoords[a*3], vertexAttribs.texcoords[a*3+1], vertexAttribs.texcoords[a*3+2]));
-        uvs.push_back(glm::vec3(vertexAttribs.texcoords[b*3], vertexAttribs.texcoords[b*3+1], vertexAttribs.texcoords[b*3+2]));
-      }
-      idx += faceVerts;
-    }
-  }
-  if (pos.size() != uvs.size()) {
-    fprintf(stderr, "uv count mismatched, padding\n");
-    uvs.resize(pos.size());
-  }
+  // Add a light to the scene
+  scene.Ia = glm::vec3(0.1f);
 
-  mesh.vertexCount = (int)pos.size();
-  mesh.vertices = (glm::vec3*)malloc(sizeof(glm::vec3) * pos.size());
-  memcpy(mesh.vertices, pos.data(), pos.size() * sizeof(glm::vec3));
-  mesh.texCoords = (glm::vec3*)malloc(sizeof(glm::vec3) * uvs.size());
-  memcpy(mesh.texCoords, uvs.data(), uvs.size() * sizeof(glm::vec3));
+  Light light;
+  light.pos = glm::vec3(0.0f, -0.5f, 0.3f);
+  light.Id = glm::vec3(0.6f);
+  light.Is = glm::vec3(0.3f);
+  scene.addLight(light);
 
-  mesh_t* devMesh = uploadMesh(&mesh);
+  // Upload scene to gpu
+  Scene* sceneDevPtr = scene.cudaCopy();
 
   // screen res
   dim3 screen_res(800, 600);
@@ -168,7 +133,7 @@ int main(int argc, char** argv)
       cudaSurfaceObject_t cudaSurfaceObject;
       cudaCreateSurfaceObject(&cudaSurfaceObject, &cudaArrayResourceDesc);
       {
-        cudaError_t cudaStatus = renderScreen(cudaSurfaceObject, screen_res, SDL_GetTicks() / 1000.0f, devMesh, camPos, m);
+        cudaError_t cudaStatus = renderScreen(cudaSurfaceObject, screen_res, SDL_GetTicks() / 1000.0f, sceneDevPtr, camPos, m);
         if (cudaStatus != cudaSuccess) {
             fprintf(stderr, "renderScreen failed!");
             return 1;
