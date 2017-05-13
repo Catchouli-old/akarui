@@ -41,6 +41,32 @@ __device__ bool intersectRayTriangle(glm::vec3 o, glm::vec3 d,
   return true;
 }
 
+__device__ void traceScene(glm::vec3 origin, glm::vec3 dir, const Scene* scene, float& t, glm::vec2& hitUV, int& hitFace, Mesh*& hitMesh)
+{
+  for (int meshIdx = 0; meshIdx < scene->meshCount; ++meshIdx) {
+    Mesh* mesh = scene->meshes[meshIdx];
+    for (int tri = 0; tri < mesh->idxCount/3; ++tri) {
+      int a = mesh->idx[tri*3];
+      int b = mesh->idx[tri*3+1];
+      int c = mesh->idx[tri*3+2];
+
+      glm::vec3 v0 = mesh->pos[a];
+      glm::vec3 v1 = mesh->pos[b];
+      glm::vec3 v2 = mesh->pos[c];
+
+      glm::vec2 uv;
+      float hitT = INFINITY;
+      intersectRayTriangle(origin, dir, v0, v1, v2, uv, hitT);
+      if (hitT != INFINITY && hitT < t && hitT >= 0.0f) {
+        t = hitT;
+        hitFace = tri;
+        hitUV = uv;
+        hitMesh = mesh;
+      }
+    }
+  }
+}
+
 __global__ void renderPixel(cudaSurfaceObject_t surface, dim3 screenRes, dim3 blockSize, float time, Scene* scene, glm::vec3 camPos, glm::mat4 viewRot)
 {
     int x = blockIdx.x * blockSize.x + threadIdx.x;
@@ -59,28 +85,8 @@ __global__ void renderPixel(cudaSurfaceObject_t surface, dim3 screenRes, dim3 bl
     glm::vec2 hitUV;
     int hitFace;
     Mesh* hitMesh;
-    for (int meshIdx = 0; meshIdx < scene->meshCount; ++meshIdx) {
-      Mesh* mesh = scene->meshes[meshIdx];
-      for (int tri = 0; tri < mesh->idxCount/3; ++tri) {
-        int a = mesh->idx[tri*3];
-        int b = mesh->idx[tri*3+1];
-        int c = mesh->idx[tri*3+2];
 
-        glm::vec3 v0 = mesh->pos[a];
-        glm::vec3 v1 = mesh->pos[b];
-        glm::vec3 v2 = mesh->pos[c];
-
-        glm::vec2 uv;
-        float t = minT;
-        intersectRayTriangle(origin, direction, v0, v1, v2, uv, t);
-        if (t < minT && t > 0.0f) {
-          minT = t;
-          hitFace = tri;
-          hitUV = uv;
-          hitMesh = mesh;
-        }
-      }
-    }
+    traceScene(origin, direction, scene, minT, hitUV, hitFace, hitMesh);
 
     glm::vec4 outColour;
 
@@ -109,12 +115,21 @@ __global__ void renderPixel(cudaSurfaceObject_t surface, dim3 screenRes, dim3 bl
       for (int i = 0; i < scene->lightCount; ++i) {
         Light* l = &scene->lights[i];
 
-        glm::vec3 Lm = glm::normalize(l->pos - hitPoint);
+        glm::vec3 lightDiff = l->pos - hitPoint;
+        float lightDist = glm::length(lightDiff);
+        glm::vec3 Lm = lightDiff / lightDist;
 
-        // lambert
-        light += glm::dot(normal, Lm) * l->Id * mat->Kd;
+        // Shadow ray
+        float hit = INFINITY;
+        glm::vec2 tmp0; int tmp1; Mesh* tmp2;
+        //traceScene(hitPoint + normal * 0.1f, Lm, scene, hit, tmp0, tmp1, tmp2);
 
-        // blinn-phong
+        if (hit == INFINITY) {
+          // lambert
+          light += glm::dot(normal, Lm) * l->Id * mat->Kd;
+
+          // blinn-phong
+        }
       }
       
       outColour = glm::vec4(light, 1.0f);

@@ -39,7 +39,7 @@ int main(int argc, char** argv)
   scene.Ia = glm::vec3(0.1f);
 
   Light light;
-  light.pos = glm::vec3(0.0f, -0.5f, 0.3f);
+  light.pos = glm::vec3(0.0f, -0.0f, -1.0f);
   light.Id = glm::vec3(0.6f);
   light.Is = glm::vec3(0.3f);
   scene.addLight(light);
