@@ -99,6 +99,8 @@ int main(int argc, char** argv)
         running = false;
       }
       else if (evt.type == SDL_MOUSEMOTION) {
+        if (abs(evt.motion.xrel) > 10 || abs(evt.motion.yrel) > 10)
+          continue;
         camRot.y -= (float)evt.motion.xrel;
         camRot.x -= (float)evt.motion.yrel;
         camRot.x = glm::clamp(camRot.x, -90.0f, 90.0f);
