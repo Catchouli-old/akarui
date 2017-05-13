@@ -41,7 +41,38 @@ __device__ bool intersectRayTriangle(glm::vec3 o, glm::vec3 d,
   return true;
 }
 
-__device__ void traceScene(glm::vec3 origin, glm::vec3 dir, const Scene* scene, float& t, glm::vec2& hitUV, int& hitFace, Mesh*& hitMesh)
+__device__ bool rayIntersectSphere(glm::vec3 origin, glm::vec3 direction, glm::vec4 sphere, glm::vec2& intersectionPoints) {
+  float c = glm::length(origin - glm::vec3(sphere)) - sphere.w*sphere.w;
+  float dotVal = glm::dot(direction, (origin - glm::vec3(sphere)));
+  float sqrtVal = dotVal*dotVal - glm::dot(origin - glm::vec3(sphere), origin - glm::vec3(sphere)) + sphere.w*sphere.w;
+  if (sqrtVal <= 0.0) {
+    return false;
+  }
+  if (sqrtVal == 0.0) {
+    intersectionPoints.x = -dotVal;
+    intersectionPoints.y = -dotVal;
+    return true;
+  }
+  else {
+    float d1 = -(dotVal)+sqrt(sqrtVal);
+    float d2 = -(dotVal)-sqrt(sqrtVal);
+    if (d1 < 0.0 && d2 < 0.0) {
+      return false;
+    }
+    else if (d1 < 0.0 || d2 < 0.0) {
+      intersectionPoints.x = glm::min(d1, d2);
+      intersectionPoints.y = glm::max(d1, d2);
+      return true;
+    }
+    else {
+      intersectionPoints.x = glm::min(d1, d2);
+      intersectionPoints.y = glm::max(d1, d2);
+      return true;
+    }
+  }
+}
+
+__device__ void traceScene(glm::vec3 origin, glm::vec3 dir, const Scene* scene, float& t, glm::vec2& hitUV, int& hitFace, const Mesh*& hitMesh, const Material*& hitMat)
 {
   for (int meshIdx = 0; meshIdx < scene->meshCount; ++meshIdx) {
     Mesh* mesh = scene->meshes[meshIdx];
@@ -62,6 +93,7 @@ __device__ void traceScene(glm::vec3 origin, glm::vec3 dir, const Scene* scene, 
         hitFace = tri;
         hitUV = uv;
         hitMesh = mesh;
+        hitMat = &scene->defaultMat;
       }
     }
   }
@@ -78,46 +110,59 @@ __global__ void renderPixel(cudaSurfaceObject_t surface, dim3 screenRes, dim3 bl
     normalisedCoord.y *= aspect;
 
     glm::vec3 origin = camPos;
-    glm::vec3 direction = glm::mat3(viewRot) * glm::normalize(glm::vec3(normalisedCoord.x, normalisedCoord.y, 1.0f));
+    glm::vec3 direction = glm::mat3(viewRot) * glm::normalize(glm::vec3(normalisedCoord.x, normalisedCoord.y, -1.0f));
 
     // test intersection with each tri
     float minT = INFINITY;
-    glm::vec2 hitUV;
-    int hitFace;
-    Mesh* hitMesh;
+    glm::vec2 hitUV = glm::vec2(0.0f);
+    int hitFace = -1;
+    const Mesh* hitMesh = nullptr;
+    const Material* hitMat = &scene->defaultMat;
 
-    traceScene(origin, direction, scene, minT, hitUV, hitFace, hitMesh);
+    // raytrace the lights for debug drawing
+    for (int i = 0; i < scene->lightCount; ++i) {
+      Light* light = &scene->lights[i];
+      if (light->type == Light::Type_Point) {
+        glm::vec2 hit;
+        if (rayIntersectSphere(origin, direction, glm::vec4(light->pos + glm::vec3(sin(time), cos(time), 0.0f) * 0.5f, 0.1f), hit))
+          minT = glm::min(hit.x, minT);
+      }
+    }
+
+    // raytrace the scene
+    traceScene(origin, direction, scene, minT, hitUV, hitFace, hitMesh, hitMat);
 
     glm::vec4 outColour;
 
     if (minT != INFINITY) {
-      // we got a hit. calculate the normal
-      int a = hitMesh->idx[hitFace*3+0];
-      int b = hitMesh->idx[hitFace*3+1];
-      int c = hitMesh->idx[hitFace*3+2];
-      glm::vec3 v0(hitMesh->pos[a]), v1(hitMesh->pos[b]), v2(hitMesh->pos[c]);
-      glm::vec3 normal = glm::normalize(glm::cross(v1 - v0, v1 - v2));
+      glm::vec3 normal = glm::vec3(1.0f);
+
+      if (hitMesh != nullptr && hitFace >= 0) {
+        // we got a hit. calculate the normal
+        int a = hitMesh->idx[hitFace * 3 + 0];
+        int b = hitMesh->idx[hitFace * 3 + 1];
+        int c = hitMesh->idx[hitFace * 3 + 2];
+        glm::vec3 v0(hitMesh->pos[a]), v1(hitMesh->pos[b]), v2(hitMesh->pos[c]);
+        normal = glm::normalize(glm::cross(v1 - v0, v1 - v2));
+      }
 
       glm::vec3 hitPoint = origin + minT * direction;
-
-      // calculate lighting using a simple ambient + lambert + blinn-phong BRDF
-      const Material defaultMaterial { Material::Type_Constant
-                                     , glm::vec3(1.0f, 0.0f, 1.0f)
-                                     , glm::vec3(1.0f, 0.0f, 1.0f)
-                                     , glm::vec3(1.0f, 0.0f, 1.0f)
-                                     , 1.0f
-                                     };
-
-      const Material* mat = &defaultMaterial;
 
       glm::vec3 light = scene->Ia;
 
       for (int i = 0; i < scene->lightCount; ++i) {
         Light* l = &scene->lights[i];
 
-        glm::vec3 lightDiff = l->pos - hitPoint;
-        float lightDist = glm::length(lightDiff);
-        glm::vec3 Lm = lightDiff / lightDist;
+        glm::vec3 Lm;
+
+        if (l->type == l->Type_Point) {
+          glm::vec3 lightDiff = hitPoint - (l->pos + glm::vec3(sin(time), cos(time), 0.0f) * 0.5f);
+          float lightDist = glm::length(lightDiff);
+          Lm = lightDiff / lightDist;
+        }
+        else if (l->type == l->Type_Directional) {
+          Lm = l->dir;
+        }
 
         // Shadow ray
         float hit = INFINITY;
@@ -126,13 +171,13 @@ __global__ void renderPixel(cudaSurfaceObject_t surface, dim3 screenRes, dim3 bl
 
         if (hit == INFINITY) {
           // lambert
-          light += glm::dot(normal, Lm) * l->Id * mat->Kd;
+          light += glm::dot(normal, Lm);
 
           // blinn-phong
         }
       }
       
-      outColour = glm::vec4(light, 1.0f);
+      outColour = glm::clamp(glm::vec4(light, 1.0f), 0.0f, 1.0f);
     }
     else {
       outColour = glm::vec4(normalisedCoord, 0.0f, 1.0f);

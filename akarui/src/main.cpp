@@ -29,7 +29,7 @@ int main(int argc, char** argv)
 
   // build object transform
   glm::mat4 m(1.0f);
-  m = glm::rotate(m, 3.14159f, glm::vec3(0.0f, 1.0f, 0.0f));
+  //m = glm::rotate(m, 3.14159f, glm::vec3(0.0f, 1.0f, 0.0f));
 
   // load scene
   Scene scene;
@@ -39,8 +39,9 @@ int main(int argc, char** argv)
   scene.Ia = glm::vec3(0.1f);
 
   Light light;
-  light.pos = glm::vec3(0.0f, -0.0f, -1.0f);
-  light.Id = glm::vec3(0.6f);
+  light.type = Light::Type_Point;
+  light.pos = glm::vec3(0.0f, 1.0f, 1.0f);
+  light.Id = glm::vec3(0.3f);
   light.Is = glm::vec3(0.3f);
   scene.addLight(light);
 
@@ -86,7 +87,7 @@ int main(int argc, char** argv)
   uint32_t lastUpdate = SDL_GetTicks();
 
   // camera params
-  glm::vec3 camPos(0.0f, 1.0f, -2.0f);
+  glm::vec3 camPos(0.0f, 1.0f, 3.0f);
   glm::vec2 camRot(0.0f);
 
   bool running = true;
@@ -98,8 +99,8 @@ int main(int argc, char** argv)
         running = false;
       }
       else if (evt.type == SDL_MOUSEMOTION) {
-        camRot.y += (float)evt.motion.xrel;
-        camRot.x += (float)evt.motion.yrel;
+        camRot.y -= (float)evt.motion.xrel;
+        camRot.x -= (float)evt.motion.yrel;
         camRot.x = glm::clamp(camRot.x, -90.0f, 90.0f);
       }
     }
@@ -112,13 +113,17 @@ int main(int argc, char** argv)
     m = glm::rotate(m, 0.01f * camRot.x, glm::vec3(1.0f, 0.0f, 0.0f));
 
     if (keys[SDL_SCANCODE_W])
-      camPos += 0.01f * glm::mat3(m) * glm::vec3(0.0f, 0.0f, 1.0f);
-    if (keys[SDL_SCANCODE_S])
       camPos -= 0.01f * glm::mat3(m) * glm::vec3(0.0f, 0.0f, 1.0f);
+    if (keys[SDL_SCANCODE_S])
+      camPos += 0.01f * glm::mat3(m) * glm::vec3(0.0f, 0.0f, 1.0f);
     if (keys[SDL_SCANCODE_A])
       camPos -= 0.01f * glm::mat3(m) * glm::vec3(1.0f, 0.0f, 0.0f);
     if (keys[SDL_SCANCODE_D])
       camPos += 0.01f * glm::mat3(m) * glm::vec3(1.0f, 0.0f, 0.0f);
+    if (keys[SDL_SCANCODE_Q])
+      camPos -= 0.01f * glm::mat3(m) * glm::vec3(0.0f, 1.0f, 0.0f);
+    if (keys[SDL_SCANCODE_E])
+      camPos += 0.01f * glm::mat3(m) * glm::vec3(0.0f, 1.0f, 0.0f);
 
     // map texture into cuda and invoke render kernel
     cudaGraphicsMapResources(1, &cudaResource);

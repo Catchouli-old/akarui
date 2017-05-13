@@ -17,23 +17,10 @@ T* cudaCopyArray(T* arr, int count)
 // loosely based around obj material support
 struct Material
 {
-  enum Type
-    // color = Kd
-    { Type_Constant = 0
-    // color = KaIa + Kd { SUM j=1..ls, (N * Lj)Ij }
-    , Type_Lambert = 1
-    // color = KaIa
-    //         + Kd{ SUM j = 1..ls, (N*Lj)Ij }
-    //         + Ks{ SUM j = 1..ls, ((H*Hj) ^ Ns)Ij }
-    , Type_BlinnPhong = 2
-    };
-
   Material() {}
 
-  __device__ Material(Type t, glm::vec3 Ka, glm::vec3 Kd, glm::vec3 Ks, float Ns)
-    : type(t), Ka(Ka), Kd(Kd), Ks(Ks), Ns(Ns) {}
-
-  Type type = Type_Constant;
+  __device__ Material(glm::vec3 Ka, glm::vec3 Kd, glm::vec3 Ks, float Ns)
+    : Ka(Ka), Kd(Kd), Ks(Ks), Ns(Ns) {}
 
   glm::vec3 Ka = glm::vec3(0.0f); //^ ambient reflectance
   glm::vec3 Kd = glm::vec3(0.0f); //^ diffuse reflectance
@@ -145,12 +132,17 @@ struct Mesh
 
 struct Light
 {
-  enum Type { Type_Point };
+  Light() {}
 
-  glm::vec3 pos = glm::vec3(0.0f);
+  enum Type { Type_Directional, Type_Point };
+
+  Type type = Type_Directional;
 
   glm::vec3 Id = glm::vec3(0.0f); //^ diffuse intensity * colour
   glm::vec3 Is = glm::vec3(0.0f); //^ specular intensity * colour
+
+  glm::vec3 pos = glm::vec3(0.0f);
+  glm::vec3 dir = glm::normalize(glm::vec3(0.0f, -1.0f, -1.0f));
 };
 
 struct Scene
@@ -278,4 +270,6 @@ struct Scene
 
   int lightCount = 0;
   Light* lights = nullptr;
+
+  Material defaultMat = Material(glm::vec3(1.0f), glm::vec3(0.0f), glm::vec3(0.0f), 1.0f);
 };
