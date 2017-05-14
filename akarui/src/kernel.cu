@@ -10,22 +10,35 @@
 
 #include "kernel.h"
 
+// hit result
+struct hit_t {
+  float minT = INFINITY;
+  glm::vec2 hitUV = glm::vec2(0.0f);
+  int hitFace = -1;
+  const Mesh* hitMesh = nullptr;
+  const Material* hitMat = nullptr;
+  // front (1) or back (-1) face
+  float face = 1.0f;
+};
+
+
+// intersect a ray with a triangle
 __device__ bool intersectRayTriangle(glm::vec3 o, glm::vec3 d,
   glm::vec3 v0, glm::vec3 v1, glm::vec3 v2,
-  glm::vec2& uv, float& t)
+  glm::vec2& uv, float& t, float& face)
 {
   glm::vec3 v0v1 = v1 - v0;
   glm::vec3 v0v2 = v2 - v0;
   glm::vec3 pvec = glm::cross(d, v0v2);
   float det = glm::dot(v0v1, pvec);
-#ifdef CULLING 
+#ifdef CULLING
   // if the determinant is negative the triangle is backfacing
   // if the determinant is close to 0, the ray misses the triangle
   if (det < FLT_EPSILON) return false;
-#else 
+#else
   // ray and triangle are parallel if det is close to 0
   if (fabs(det) < FLT_EPSILON) return false;
-#endif 
+#endif
   float invDet = 1 / det;
 
   glm::vec3 tvec = o - v0;
@@ -37,42 +50,59 @@ __device__ bool intersectRayTriangle(glm::vec3 o, glm::vec3 d,
   if (uv.y < 0.0f || uv.x + uv.y > 1.0f) return false;
 
   t = glm::dot(v0v2, qvec) * invDet;
+  face = signbit(det) ? -1.0f : 1.0f;
 
   return true;
 }
 
-__device__ bool rayIntersectSphere(glm::vec3 origin, glm::vec3 direction, glm::vec4 sphere, glm::vec2& intersectionPoints) {
+// intersect a ray with a sphere
+__device__ bool rayIntersectSphere(glm::vec4 sphere, glm::vec3 origin, glm::vec3 direction, hit_t& out) {
   float c = glm::length(origin - glm::vec3(sphere)) - sphere.w*sphere.w;
   float dotVal = glm::dot(direction, (origin - glm::vec3(sphere)));
   float sqrtVal = dotVal*dotVal - glm::dot(origin - glm::vec3(sphere), origin - glm::vec3(sphere)) + sphere.w*sphere.w;
+
+  bool hit;
+  glm::vec2 intersections;
+
   if (sqrtVal <= 0.0) {
-    return false;
+    hit = false;
   }
   if (sqrtVal == 0.0) {
-    intersectionPoints.x = -dotVal;
-    intersectionPoints.y = -dotVal;
-    return true;
+    intersections.x = -dotVal;
+    intersections.y = -dotVal;
+    hit = true;
   }
   else {
     float d1 = -(dotVal)+sqrt(sqrtVal);
     float d2 = -(dotVal)-sqrt(sqrtVal);
     if (d1 < 0.0 && d2 < 0.0) {
-      return false;
+      hit = false;
     }
     else if (d1 < 0.0 || d2 < 0.0) {
-      intersectionPoints.x = glm::min(d1, d2);
-      intersectionPoints.y = glm::max(d1, d2);
-      return true;
+      intersections.x = glm::min(d1, d2);
+      intersections.y = glm::max(d1, d2);
+      hit = true;
     }
     else {
-      intersectionPoints.x = glm::min(d1, d2);
-      intersectionPoints.y = glm::max(d1, d2);
-      return true;
+      intersections.x = glm::min(d1, d2);
+      intersections.y = glm::max(d1, d2);
+      hit = true;
     }
   }
+
+  if (hit && intersections.x < out.minT) {
+    out.hitFace = -1;
+    out.hitMat = nullptr;
+    out.hitMesh = nullptr;
+    out.hitUV = glm::vec2(0.0f, 0.0f);
+    out.minT = intersections.x;
+  }
+
+  return hit;
 }
 
-__device__ void traceScene(glm::vec3 origin, glm::vec3 dir, const Scene* scene, float& t, glm::vec2& hitUV, int& hitFace, const Mesh*& hitMesh, const Material*& hitMat)
+// raytrace a scene
+__device__ void traceScene(glm::vec3 origin, glm::vec3 dir, const Scene* scene, hit_t& out)
 {
   for (int meshIdx = 0; meshIdx < scene->meshCount; ++meshIdx) {
     Mesh* mesh = scene->meshes[meshIdx];
@@ -87,139 +117,162 @@ __device__ void traceScene(glm::vec3 origin, glm::vec3 dir, const Scene* scene, 
 
       glm::vec2 uv;
       float hitT = INFINITY;
-      intersectRayTriangle(origin, dir, v0, v1, v2, uv, hitT);
-      if (hitT != INFINITY && hitT < t && hitT >= 0.0f) {
-        t = hitT;
-        hitFace = tri;
-        hitUV = uv;
-        hitMesh = mesh;
-        hitMat = &scene->defaultMat;
+      float face;
+      intersectRayTriangle(origin, dir, v0, v1, v2, uv, hitT, face);
+      if (hitT != INFINITY && hitT < out.minT && hitT >= 0.0f) {
+        out.minT = hitT;
+        out.hitFace = tri;
+        out.hitUV = uv;
+        out.hitMesh = mesh;
+        int mat = mesh->matIdx[tri];
+        out.hitMat = mat == -1 ? &scene->defaultMat : &mesh->mat[mat];
+        out.face = face;
       }
     }
   }
 }
 
-__global__ void renderPixel(cudaSurfaceObject_t surface, dim3 screenRes, dim3 blockSize, float time, Scene* scene, glm::vec3 camPos, glm::mat4 viewRot)
+// trace a ray recursively
+//__device__ glm::vec3 traceRay(Scene* scene, glm::vec3 origin, glm::vec3 direction, int depth)
+//{
+//
+//}
+
+__global__ void renderPixel(cudaSurfaceObject_t surface, dim3 screenRes, dim3 blockSize, float time, Scene* scene, glm::vec3 camPos, glm::mat3 viewRot)
 {
-    int x = blockIdx.x * blockSize.x + threadIdx.x;
-    int y = blockIdx.y * blockSize.y + threadIdx.y;
+  // pixel coordinate
+  int x = blockIdx.x * blockSize.x + threadIdx.x;
+  int y = blockIdx.y * blockSize.y + threadIdx.y;
 
-    float aspect = (float)screenRes.y / screenRes.x;
+  // aspect ratio
+  float aspect = (float)screenRes.x / screenRes.y;
 
-    glm::vec2 normalisedCoord = 2.0f * glm::vec2(x, screenRes.y - y) / glm::vec2(screenRes.x, screenRes.y) - glm::vec2(1.0f);
-    normalisedCoord.y *= aspect;
+  // normalised screen coordinates (-1..1) in the x axis and (-aspect..aspect) in the y axis
+  glm::vec2 normalisedCoord = 2.0f * glm::vec2(x, screenRes.y - y) / glm::vec2(screenRes.x, screenRes.y) - glm::vec2(1.0f);
+  normalisedCoord.y /= aspect;
 
-    glm::vec3 origin = camPos;
-    glm::vec3 direction = glm::mat3(viewRot) * glm::normalize(glm::vec3(normalisedCoord.x, normalisedCoord.y, -1.0f));
+  // construct ray
+  glm::vec3 origin = camPos;
+  glm::vec3 direction = viewRot * glm::normalize(glm::vec3(normalisedCoord.x, normalisedCoord.y, -1.0f));
 
-    // test intersection with each tri
-    float minT = INFINITY;
-    glm::vec2 hitUV = glm::vec2(0.0f);
-    int hitFace = -1;
-    const Mesh* hitMesh = nullptr;
-    const Material* hitMat = &scene->defaultMat;
+  // ray hit
+  hit_t hit;
+  hit.hitMat = &scene->defaultMat;
 
-    // raytrace the lights for debug drawing
+  // raytrace the lights for debug drawing
+  for (int i = 0; i < scene->lightCount; ++i) {
+    Light* light = &scene->lights[i];
+    if (light->type == Light::Type_Point) {
+      glm::vec4 sphere = glm::vec4(light->pos, 0.1f);
+      //rayIntersectSphere(sphere, origin, direction, hit);
+    }
+  }
+
+  // raytrace the scene
+  traceScene(origin, direction, scene, hit);
+
+  glm::vec3 outColour(0.0f);
+
+  //outColour = hit.minT != INFINITY ? glm::vec3(1.0f) : glm::vec3(0.0f);
+  //if (false)
+  if (hit.minT != INFINITY) {
+    glm::vec3 normal = glm::vec3(1.0f);
+
+    if (hit.hitMesh != nullptr && hit.hitFace >= 0) {
+      // Barycentric coordinates
+      float v = hit.hitUV.x;
+      float t = hit.hitUV.y;
+      float u = 1.0f - hit.hitUV.x - hit.hitUV.y;
+
+      // Get face indices
+      int a = hit.hitMesh->idx[hit.hitFace * 3 + 0];
+      int b = hit.hitMesh->idx[hit.hitFace * 3 + 1];
+      int c = hit.hitMesh->idx[hit.hitFace * 3 + 2];
+
+      // interpolate normal
+      glm::vec3 nA = hit.hitMesh->nrm[a];
+      glm::vec3 nB = hit.hitMesh->nrm[b];
+      glm::vec3 nC = hit.hitMesh->nrm[c];
+      normal = u * nA + v * nB + t * nC;
+      normal *= hit.face;
+    }
+
+    glm::vec3 hitPoint = origin + hit.minT * direction;
+    glm::vec3 V = origin - hitPoint;
+
+    glm::vec3 light = scene->Ia;
+
     for (int i = 0; i < scene->lightCount; ++i) {
-      Light* light = &scene->lights[i];
-      if (light->type == Light::Type_Point) {
-        glm::vec2 hit;
-        if (rayIntersectSphere(origin, direction, glm::vec4(light->pos + glm::vec3(sin(time), cos(time), 0.0f) * 0.5f, 0.1f), hit))
-          minT = glm::min(hit.x, minT);
+      Light* l = &scene->lights[i];
+      glm::vec3 Lm;
+
+      if (l->type == l->Type_Point) {
+        glm::vec3 lightDiff = l->pos - hitPoint;
+        float lightDist = glm::length(lightDiff);
+        Lm = lightDiff / lightDist;
       }
-    }
-
-    // raytrace the scene
-    traceScene(origin, direction, scene, minT, hitUV, hitFace, hitMesh, hitMat);
-
-    glm::vec4 outColour;
-
-    if (minT != INFINITY) {
-      glm::vec3 normal = glm::vec3(1.0f);
-
-      if (hitMesh != nullptr && hitFace >= 0) {
-        // we got a hit. calculate the normal
-        int a = hitMesh->idx[hitFace * 3 + 0];
-        int b = hitMesh->idx[hitFace * 3 + 1];
-        int c = hitMesh->idx[hitFace * 3 + 2];
-        glm::vec3 v0(hitMesh->pos[a]), v1(hitMesh->pos[b]), v2(hitMesh->pos[c]);
-        normal = glm::normalize(glm::cross(v1 - v0, v1 - v2));
+      else if (l->type == l->Type_Directional) {
+        Lm = l->dir;
       }
 
-      glm::vec3 hitPoint = origin + minT * direction;
+      // Shadow ray
+      hit_t shadowHit;
+      shadowHit.hitMat = &scene->defaultMat;
+      //traceScene(hitPoint + normal * 0.01f, Lm, scene, shadowHit);
 
-      glm::vec3 light = scene->Ia;
+      light = glm::vec3(0.0f);
 
-      for (int i = 0; i < scene->lightCount; ++i) {
-        Light* l = &scene->lights[i];
+      if (shadowHit.minT == INFINITY) {
+        // lambert
+        light += glm::dot(normal, Lm) * l->Id * hit.hitMat->Kd;
 
-        glm::vec3 Lm;
-
-        if (l->type == l->Type_Point) {
-          glm::vec3 lightDiff = hitPoint - (l->pos + glm::vec3(sin(time), cos(time), 0.0f) * 0.5f);
-          float lightDist = glm::length(lightDiff);
-          Lm = lightDiff / lightDist;
-        }
-        else if (l->type == l->Type_Directional) {
-          Lm = l->dir;
-        }
-
-        // Shadow ray
-        float hit = INFINITY;
-        glm::vec2 tmp0; int tmp1; Mesh* tmp2;
-        //traceScene(hitPoint + normal * 0.1f, Lm, scene, hit, tmp0, tmp1, tmp2);
-
-        if (hit == INFINITY) {
-          // lambert
-          light += glm::dot(normal, Lm);
-
-          // blinn-phong
-        }
+        // blinn-phong
+        glm::vec3 R = glm::reflect(-Lm, normal);
+        glm::vec3 halfVector = (Lm + V) / glm::length(Lm + V);
+        light += glm::pow(glm::dot(normal, halfVector), hit.hitMat->Ns) * l->Is * hit.hitMat->Ks;
       }
-      
-      outColour = glm::clamp(glm::vec4(light, 1.0f), 0.0f, 1.0f);
     }
-    else {
-      outColour = glm::vec4(normalisedCoord, 0.0f, 1.0f);
-      //outColour = glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
-    }
+    
+    outColour = glm::clamp(light, 0.0f, 1.0f);
+  }
 
-    if (x < screenRes.x && y < screenRes.y)
-      surf2Dwrite(float4{outColour.x, outColour.y, outColour.z, outColour.w}, surface, x * 4 * sizeof(float), y);
+  if (x < screenRes.x && y < screenRes.y)
+    surf2Dwrite(float4{outColour.x, outColour.y, outColour.z, 0.0f}, surface, x * 4 * sizeof(float), y);
 }
 
-cudaError_t renderScreen(cudaSurfaceObject_t surface, dim3 screenRes, float time, Scene* scene, glm::vec3 camPos, glm::mat4& viewMat)
+cudaError_t renderScreen(cudaSurfaceObject_t surface, dim3 screenRes, float time, Scene* scene, glm::vec3 camPos, const glm::mat3& viewMat)
 {
-    cudaError_t cudaStatus = cudaSuccess;
+  cudaError_t cudaStatus = cudaSuccess;
 
-    // calculate occupancy
-    int recBlockSize, minGridSize;
+  // calculate occupancy
+  int recBlockSize, minGridSize;
+  cudaOccupancyMaxPotentialBlockSize(&minGridSize, &recBlockSize, renderPixel, 0, 0);
 
-    cudaOccupancyMaxPotentialBlockSize(&minGridSize, &recBlockSize, renderPixel, 0, 0);
+  // Convert block size to 2d
+  dim3 blockSize(1, recBlockSize);
+  while (blockSize.x < blockSize.y) {
+    blockSize.x *= 2;
+    blockSize.y /= 2;
+  }
 
-    // Convert block size to 2d
-    dim3 blockSize(1, recBlockSize);
-    while (blockSize.x < blockSize.y) {
-      blockSize.x *= 2;
-      blockSize.y /= 2;
-    }
+  // calculate grid size to cover the whole screen
+  dim3 gridSize(int(ceil(screenRes.x/float(blockSize.x))), int(ceil(screenRes.y/float(blockSize.y))));
 
-    dim3 gridSize(int(ceil(screenRes.x/float(blockSize.x))), int(ceil(screenRes.y/float(blockSize.y))));
+  // invoke kernel
+  renderPixel<<<gridSize, blockSize>>>(surface, screenRes, blockSize, time, scene, camPos, viewMat);
 
-    renderPixel<<<gridSize, blockSize>>>(surface, screenRes, blockSize, time, scene, camPos, viewMat);
-
-    //// Check for any errors launching the kernel
-    cudaStatus = cudaGetLastError();
-    if (cudaStatus != cudaSuccess) {
-        fprintf(stderr, "addKernel launch failed: %s\n", cudaGetErrorString(cudaStatus));
-    }
-    
-    //// cudaDeviceSynchronize waits for the kernel to finish, and returns
-    //// any errors encountered during the launch.
-    cudaStatus = cudaDeviceSynchronize();
-    if (cudaStatus != cudaSuccess) {
-        fprintf(stderr, "cudaDeviceSynchronize returned error code %d after launching addKernel!\n", cudaStatus);
-    }
-    
-    return cudaStatus;
+  // check for any errors launching the kernel
+  cudaStatus = cudaGetLastError();
+  if (cudaStatus != cudaSuccess) {
+      fprintf(stderr, "addKernel launch failed: %s\n", cudaGetErrorString(cudaStatus));
+  }
+  
+  // cudaDeviceSynchronize waits for the kernel to finish, and returns
+  // any errors encountered during the launch.
+  cudaStatus = cudaDeviceSynchronize();
+  if (cudaStatus != cudaSuccess) {
+      fprintf(stderr, "cudaDeviceSynchronize returned error code %d after launching addKernel!\n", cudaStatus);
+  }
+  
+  return cudaStatus;
 }

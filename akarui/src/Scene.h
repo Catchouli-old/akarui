@@ -3,6 +3,8 @@
 #include <glm/glm.hpp>
 #include "cuda_runtime.h"
 #include "tiny_obj_loader.h"
+#include <vector>
+#include <map>
 
 template <typename T>
 T* cudaCopyArray(T* arr, int count)
@@ -36,6 +38,7 @@ struct Mesh
     , uv(new glm::vec3[0])
     , mat(new Material[0])
     , idx(new int[0])
+    , matIdx(new int[0])
   {
   }
 
@@ -46,6 +49,7 @@ struct Mesh
     delete[] uv;
     delete[] mat;
     delete[] idx;
+    delete[] matIdx;
   }
 
   Mesh* cudaCopy()
@@ -58,6 +62,7 @@ struct Mesh
     mesh->uv = cudaCopyArray(uv, uvCount);
     mesh->mat = cudaCopyArray(mat, materialCount);
     mesh->idx = cudaCopyArray(idx, idxCount);
+    mesh->matIdx = cudaCopyArray(matIdx, matIdxCount);
 
     Mesh* devPtr = nullptr;
     cudaMalloc(&devPtr, sizeof(Mesh));
@@ -79,19 +84,22 @@ struct Mesh
     ::cudaFree(mesh->uv);
     ::cudaFree(mesh->mat);
     ::cudaFree(mesh->idx);
+    ::cudaFree(mesh->matIdx);
     ::cudaFree(devPtr);
 
     free(mesh);
   }
 
   void set(std::vector<glm::vec3> pos, std::vector<glm::vec3> normals,
-    std::vector<glm::vec3> uvs, std::vector<int> indices, std::vector<Material> materials)
+    std::vector<glm::vec3> uvs, std::vector<int> indices, std::vector<int> materialIndices,
+    std::vector<Material> materials)
   {
     delete[] this->pos;
     delete[] this->nrm;
     delete[] this->uv;
     delete[] this->mat;
     delete[] this->idx;
+    delete[] this->matIdx;
 
     posCount = (int)pos.size();
     this->pos = new glm::vec3[pos.size()];
@@ -109,6 +117,10 @@ struct Mesh
     this->idx = new int[indices.size()];
     memcpy(this->idx, indices.data(), sizeof(int) * indices.size());
 
+    matIdxCount = (int)materialIndices.size();
+    this->matIdx = new int[materialIndices.size()];
+    memcpy(this->matIdx, materialIndices.data(), sizeof(int) * materialIndices.size());
+
     materialCount = (int)materials.size();
     this->mat = new Material[materials.size()];
     memcpy(this->mat, materials.data(), sizeof(Material) * materials.size());
@@ -125,6 +137,11 @@ struct Mesh
 
   int idxCount = 0;
   int* idx = nullptr;
+
+  // material index is the per-triangle index into the materials
+  // -1 = default material
+  int matIdxCount = 0;
+  int* matIdx = nullptr;
 
   int materialCount = 0;
   Material* mat = nullptr;
@@ -161,7 +178,9 @@ struct Scene
     delete[] lights;
   }
 
-  void load(const char* filename, glm::mat3 orientation)
+  // todo: this clears the meshes and adds the new one
+  // might as well make it add the data instead
+  void load(const char* dir, const char* filename)
   {
     // laod from obj file
     tinyobj::attrib_t vertexAttribs;
@@ -169,44 +188,94 @@ struct Scene
     std::vector<tinyobj::material_t> materials;
 
     std::string err;
-    if (!tinyobj::LoadObj(&vertexAttribs, &shapes, &materials, &err, filename) || !err.empty()) {
+    std::string dirPath = std::string(dir) + "/";
+    std::string fullPath = std::string(dir) + "/" + filename;
+    if (!tinyobj::LoadObj(&vertexAttribs, &shapes, &materials, &err, fullPath.c_str(), dirPath.c_str()) || !err.empty()) {
       fprintf(stderr, "Error loading %s: %s\n", filename, err.c_str());
     }
 
+    // Mesh data
+    struct {
+      std::vector<glm::vec3> pos;
+      std::vector<glm::vec3> nrm;
+      std::vector<glm::vec3> uvs;
+      std::vector<int> idx;
+      std::vector<int> matIdx;
+    } data;
+
     // Load indices
-    std::vector<int> idx;
     for (auto shape = shapes.begin(); shape != shapes.end(); ++shape) {
       for (auto it = shape->mesh.indices.begin(); it != shape->mesh.indices.end(); ++it) {
-        idx.push_back(it->vertex_index);
+        data.idx.push_back(it->vertex_index);
+      }
+      for (auto it = shape->mesh.material_ids.begin(); it != shape->mesh.material_ids.end(); ++it) {
+        data.matIdx.push_back(*it);
       }
     }
 
     // Load vertex attribs
-    std::vector<glm::vec3> pos;
-    std::vector<glm::vec3> nrm;
-    std::vector<glm::vec3> uvs;
     for (int i = 0; i + 2 < vertexAttribs.vertices.size(); i += 3)
-      pos.push_back(orientation * glm::vec3(vertexAttribs.vertices[i], vertexAttribs.vertices[i + 1], vertexAttribs.vertices[i + 2]));
+      data.pos.push_back(glm::vec3(vertexAttribs.vertices[i], vertexAttribs.vertices[i + 1], vertexAttribs.vertices[i + 2]));
     for (int i = 0; i + 2 < vertexAttribs.texcoords.size(); i += 3)
-      uvs.push_back(glm::vec3(vertexAttribs.texcoords[i], vertexAttribs.texcoords[i + 1], vertexAttribs.texcoords[i + 2]));
+      data.uvs.push_back(glm::vec3(vertexAttribs.texcoords[i], vertexAttribs.texcoords[i + 1], vertexAttribs.texcoords[i + 2]));
     for (int i = 0; i + 2 < vertexAttribs.normals.size(); i += 3)
-      nrm.push_back(glm::vec3(vertexAttribs.normals[i], vertexAttribs.normals[i + 1], vertexAttribs.normals[i + 2]));
+      data.nrm.push_back(glm::vec3(vertexAttribs.normals[i], vertexAttribs.normals[i + 1], vertexAttribs.normals[i + 2]));
 
-    // Make sure there's the same amount of uvs and normals as positions
-    if (nrm.size() != pos.size())
-      nrm.resize(pos.size());
-    if (uvs.size() != pos.size())
-      uvs.resize(pos.size());
+    // If there's a different number of normals to positions, calculate smooth normals
+    if (true || data.nrm.size() != data.pos.size()) {
+      data.nrm.resize(data.pos.size());
+
+      // calculate normals for each face
+      std::vector<glm::vec3> faceNormals;
+      faceNormals.resize(data.idx.size() / 3);
+      for (int i = 0; i < data.idx.size() / 3; ++i) {
+        int a = data.idx[i * 3 + 0];
+        int b = data.idx[i * 3 + 1];
+        int c = data.idx[i * 3 + 2];
+        glm::vec3 v0 = data.pos[a];
+        glm::vec3 v1 = data.pos[b];
+        glm::vec3 v2 = data.pos[c];
+        faceNormals[i] = glm::normalize(glm::cross(v1 - v0, v2 - v1));
+      }
+
+      // for each vertex, average the normals of the connected faces
+      for (int i = 0; i < data.nrm.size(); ++i) {
+        std::vector<glm::vec3> normalsToAvg;
+        for (int j = 0; j < data.idx.size()/3; ++j) {
+          int a = data.idx[j * 3 + 0];
+          int b = data.idx[j * 3 + 1];
+          int c = data.idx[j * 3 + 2];
+          if (a == i || b == i || c == i) {
+            normalsToAvg.push_back(faceNormals[j]);
+          }
+        }
+        data.nrm[i] = glm::vec3(0.0f);
+        for (int j = 0; j < normalsToAvg.size(); ++j) {
+          data.nrm[i] += normalsToAvg[j] * (1.0f / normalsToAvg.size());
+        }
+      }
+    }
+
+    if (data.uvs.size() != data.pos.size())
+      data.uvs.resize(data.pos.size());
 
     // Load materials
     std::vector<Material> mat;
+    for (auto it = materials.begin(); it != materials.end(); ++it) {
+      Material m;
+      m.Ka = glm::vec3(it->ambient[0], it->ambient[1], it->ambient[2]);
+      m.Kd = glm::vec3(it->diffuse[0], it->diffuse[1], it->diffuse[2]);
+      m.Ks = glm::vec3(it->specular[0], it->specular[1], it->specular[2]);
+      m.Ns = it->shininess;
+      mat.push_back(m);
+    }
 
     // Make mesh
     delete[] meshes;
     meshes = new Mesh*[1];
     meshCount = 1;
     meshes[0] = new Mesh;
-    meshes[0]->set(pos, nrm, uvs, idx, mat);
+    meshes[0]->set(data.pos, data.nrm, data.uvs, data.idx, data.matIdx, mat);
   }
 
   void addLight(const Light& light)
@@ -261,6 +330,21 @@ struct Scene
 
     free(scene);
     free(meshes);
+  }
+
+  void cudaUpdate(Scene* devPtr)
+  {
+    // update just the parts that are likely to change
+    Scene* copy = (Scene*)malloc(sizeof(Scene));
+    cudaMemcpy(copy, devPtr, sizeof(Scene), cudaMemcpyDeviceToHost);
+
+    copy->Ia = Ia;
+    copy->lightCount = lightCount;
+    ::cudaFree(copy->lights);
+    copy->lights = cudaCopyArray(lights, lightCount);
+
+    cudaMemcpy(devPtr, copy, sizeof(Scene), cudaMemcpyHostToDevice);
+    free(copy);
   }
 
   glm::vec3 Ia = glm::vec3(0.0f); //^ ambient light
