@@ -2,6 +2,7 @@
 #include <GL/glew.h>
 #include <SDL2/SDL.h>
 #include "window.h"
+#include "imgui.h"
 
 int SDL_main(int argc, char** argv)
 {
@@ -41,8 +42,14 @@ int SDL_main(int argc, char** argv)
   };
 
   // render function
+  char buf[255] = {};
   auto render = [&](const glm::vec3& camPos, const glm::mat3 camRot) -> GLuint {
     auto time = SDL_GetTicks() / 1000.0f;
+
+    ImGui::Begin("a");
+    ImGui::LabelText("Test", "eue");
+    ImGui::InputText("test", buf, 254);
+    ImGui::End();
 
     // update scene
     glm::vec3 lightPos = glm::vec3(0.0f, 1.0f, 1.0f);
