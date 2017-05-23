@@ -3,6 +3,7 @@
 #include <glm/glm.hpp>
 #include "cuda_runtime.h"
 #include "tiny_obj_loader.h"
+#include "kdtree.h"
 #include <vector>
 #include <map>
 
@@ -50,6 +51,7 @@ struct Mesh
     delete[] mat;
     delete[] idx;
     delete[] matIdx;
+    delete kdtree;
   }
 
   Mesh* cudaCopy()
@@ -63,6 +65,7 @@ struct Mesh
     mesh->mat = cudaCopyArray(mat, materialCount);
     mesh->idx = cudaCopyArray(idx, idxCount);
     mesh->matIdx = cudaCopyArray(matIdx, matIdxCount);
+    mesh->kdtree = kdtree->cudaCopy();
 
     Mesh* devPtr = nullptr;
     cudaMalloc(&devPtr, sizeof(Mesh));
@@ -85,6 +88,7 @@ struct Mesh
     ::cudaFree(mesh->mat);
     ::cudaFree(mesh->idx);
     ::cudaFree(mesh->matIdx);
+    Kdtree::cudaFree(mesh->kdtree);
     ::cudaFree(devPtr);
 
     free(mesh);
@@ -100,6 +104,8 @@ struct Mesh
     delete[] this->mat;
     delete[] this->idx;
     delete[] this->matIdx;
+    delete kdtree;
+    kdtree = nullptr;
 
     posCount = (int)pos.size();
     this->pos = new glm::vec3[pos.size()];
@@ -126,6 +132,13 @@ struct Mesh
     memcpy(this->mat, materials.data(), sizeof(Material) * materials.size());
   }
 
+  void buildKdtree()
+  {
+    delete kdtree;
+    kdtree = new Kdtree;
+    kdtree->buildTree(pos, idx, idxCount);
+  }
+
   int posCount = 0;
   glm::vec3* pos = nullptr;
 
@@ -145,6 +158,8 @@ struct Mesh
 
   int materialCount = 0;
   Material* mat = nullptr;
+
+  Kdtree* kdtree = nullptr;
 };
 
 struct Light
@@ -276,6 +291,7 @@ struct Scene
     meshCount = 1;
     meshes[0] = new Mesh;
     meshes[0]->set(data.pos, data.nrm, data.uvs, data.idx, data.matIdx, mat);
+    meshes[0]->buildKdtree();
   }
 
   void addLight(const Light& light)

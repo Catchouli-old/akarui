@@ -14,10 +14,14 @@
     <CudaCompile Include="src\kernel.cu" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="src\AABB.cpp" />
+    <ClCompile Include="src\kdtree.cpp" />
     <ClCompile Include="src\main.cpp" />
     <ClCompile Include="src\tiny_obj_loader.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="src\AABB.h" />
+    <ClInclude Include="src\kdtree.h" />
     <ClInclude Include="src\kernel.h" />
     <ClInclude Include="src\Scene.h" />
     <ClInclude Include="src\window.h" />

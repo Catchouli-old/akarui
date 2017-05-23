@@ -3,6 +3,7 @@
 #include <SDL2/SDL.h>
 #include "window.h"
 #include "imgui.h"
+#include "kdtree.h"
 
 int SDL_main(int argc, char** argv)
 {
@@ -24,7 +25,7 @@ int SDL_main(int argc, char** argv)
 
     // load scene
     scene.load("resources/cornell-box", "CornellBox-Original.obj");
-    //scene.load("resources/head", "head.obj");
+    //scene.load("meshes/head", "head.obj");
     //scene.load("resources/testObj", "testObj.obj");
     //scene.load("resources/teapot", "teapot.obj");
 

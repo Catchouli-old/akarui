@@ -297,7 +297,6 @@ int runInWindow(int argc, char** argv, dim3 screen_res,
       char buf[255];
       sprintf_s(buf, "%d", fps);
       SDL_SetWindowTitle(window, buf);
-      printf("fps: %d\n", fps);
     }
   }
 
