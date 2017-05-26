@@ -2,6 +2,7 @@
 
 #include <vector>
 #include "AABB.h"
+#include <array>
 
 struct prim {
   int a, b, c;
@@ -32,12 +33,19 @@ public:
     }
   }
   
-  void buildNode(const glm::vec3* pos, const std::vector<prim>& idx, const AABB& aabb, int depth);
-
   KdtreeNode* m_left = nullptr;
   KdtreeNode* m_right = nullptr;
   prim* m_prims = nullptr;
   int m_primCount = 0;
+  KdtreeNode* m_ropes[6] = { 0 };
+  AABB m_aabb;
+
+private:
+  friend class Kdtree;
+
+  void buildNode(const glm::vec3* pos, const std::vector<prim>& idx, const AABB& aabb, int depth);
+
+  void generateRopes(const std::array<KdtreeNode*, 6>& ropes);
 };
 
 class Kdtree

@@ -22,6 +22,7 @@ void Kdtree::buildTree(const glm::vec3* pos, const int* indices, int indexCount)
   }
 
   m_root->buildNode(pos, idx, m_aabb, 0);
+  m_root->generateRopes({ 0 });
 }
 
 void KdtreeNode::buildNode(const glm::vec3* pos, const std::vector<prim>& idx, const AABB& aabb, int depth)
@@ -33,7 +34,7 @@ void KdtreeNode::buildNode(const glm::vec3* pos, const std::vector<prim>& idx, c
   };
 
   const int triTarget = 10;
-  const int maxDepth = 10;
+  const int maxDepth = 20;
 
   auto terminate = [&, this]() {
     return idx.size() <= triTarget || depth >= maxDepth;
@@ -43,6 +44,9 @@ void KdtreeNode::buildNode(const glm::vec3* pos, const std::vector<prim>& idx, c
     axis = PlaneAxis(depth % 3);
     pos = 0.5f;
   };
+
+  // store aabb
+  m_aabb = aabb;
 
   // Check if we want to terminate and make this a leaf
   if (terminate()) {
@@ -85,13 +89,13 @@ void KdtreeNode::buildNode(const glm::vec3* pos, const std::vector<prim>& idx, c
 
   // calculate new nodes aabbs
   AABB aabbs[2];
-  aabb.split(int(splitAxis), splitPos, aabbs[0], aabbs[1]);
+  aabb.split(int(splitAxis), objectSpaceSplitPos, aabbs[0], aabbs[1]);
 
   // create children
   m_left = new KdtreeNode;
   m_left->buildNode(pos, split[0], aabbs[0], depth + 1);
   m_right = new KdtreeNode;
-  m_right->buildNode(pos, split[0], aabbs[0], depth + 1);
+  m_right->buildNode(pos, split[1], aabbs[1], depth + 1);
 }
 
 Kdtree* Kdtree::cudaCopy()
@@ -171,4 +175,15 @@ void Kdtree::cudaFree(Kdtree* ptr)
 {
   // it should all be stored in one big memory block
   ::cudaFree(ptr);
+}
+
+void KdtreeNode::generateRopes(const std::array<KdtreeNode*, 6>& ropes)
+{
+  // if this is a leaf
+  if (!m_left && !m_right) {
+    memcpy(m_ropes, ropes.data(), 6 * sizeof(KdtreeNode*));
+  }
+  else {
+
+  }
 }

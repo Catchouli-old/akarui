@@ -21,8 +21,8 @@ void drawFullscreenQuad();
 GLuint createTexture(int width, int height);
 GLuint compileShaderProgram(const char* filename);
 
-int runInWindow(int argc, char** argv, dim3 screen_res,
-  std::function<void()> initFunc, std::function<GLuint(glm::vec3, glm::mat3)> drawFunc)
+int runInWindow(int argc, char** argv, dim3 screen_res, glm::vec3 camPos,
+  std::function<void()> initFunc, std::function<void(glm::vec3, glm::mat3)> drawFunc)
 {
   // parse command line
   TCLAP::CmdLine cmd("akarui", ' ', "0.0");
@@ -171,16 +171,12 @@ int runInWindow(int argc, char** argv, dim3 screen_res,
     };
   }
 
-  // load shader
-  GLuint program = compileShaderProgram("resources/shaders/textured.glsl");
-
   // fps counter
   int frames = 0;
   int fps = 0;
   uint32_t lastUpdate = SDL_GetTicks();
 
   // camera params
-  glm::vec3 camPos(0.0f, 1.0f, 3.0f);
   glm::vec2 camRot(0.0f);
 
   // input state
@@ -267,13 +263,8 @@ int runInWindow(int argc, char** argv, dim3 screen_res,
         camPos += 0.01f * glm::mat3(camRotMat) * glm::vec3(0.0f, 1.0f, 0.0f);
     }
 
-    // call render function and get texture to render
-    GLuint tex = drawFunc(camPos, glm::mat3(camRotMat));
-
-    // render texture to screen
-    glBindTexture(GL_TEXTURE_2D, tex);
-    glUseProgram(program);
-    drawFullscreenQuad();
+    // call render function
+    drawFunc(camPos, glm::mat3(camRotMat));
 
     glUseProgram(0);
     ImGui::Render();
