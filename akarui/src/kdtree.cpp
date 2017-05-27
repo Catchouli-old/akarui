@@ -66,6 +66,9 @@ void KdtreeNode::buildNode(const glm::vec3* pos, const std::vector<prim>& idx, c
   const float max = aabb.getMax()[int(splitAxis)];
   const float objectSpaceSplitPos = min + splitPos * (max - min);
 
+  m_splitAxis = splitAxis;
+  m_splitPosObj = objectSpaceSplitPos;
+
   // the left and right cell's primitives
   std::vector<prim> split[2];
 
@@ -177,13 +180,35 @@ void Kdtree::cudaFree(Kdtree* ptr)
   ::cudaFree(ptr);
 }
 
-void KdtreeNode::generateRopes(const std::array<KdtreeNode*, 6>& ropes)
+void KdtreeNode::generateRopes(std::array<KdtreeNode*, 6> ropes)
 {
   // if this is a leaf
   if (!m_left && !m_right) {
     memcpy(m_ropes, ropes.data(), 6 * sizeof(KdtreeNode*));
   }
   else {
+    for (int i = 0; i < 6; ++i) {
+      // todo: optimize ropes here
+    }
 
+    // create child ropes
+    std::array<KdtreeNode*, 6> leftRopes;
+    std::array<KdtreeNode*, 6> rightRopes;
+    for (int i = 0; i < 6; ++i) {
+      leftRopes[i] = ropes[i];
+      rightRopes[i] = ropes[i];
+    }
+
+    // get cube face for split axis of left and right child
+    int faceLeft = 2 * m_splitAxis + 0;
+    int faceRight = 2 * m_splitAxis + 1;
+
+    // connect left and right children with ropes
+    leftRopes[faceRight] = m_right;
+    rightRopes[faceLeft] = m_left;
+
+    // recurse
+    m_left->generateRopes(leftRopes);
+    m_right->generateRopes(rightRopes);
   }
 }

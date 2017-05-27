@@ -185,6 +185,7 @@ int runInWindow(int argc, char** argv, dim3 screen_res, glm::vec3 camPos,
 
   // main loop
   bool running = true;
+  Uint32 lastTime = SDL_GetTicks();
   while (running) {
     // handle events
     SDL_Event evt;
@@ -220,6 +221,11 @@ int runInWindow(int argc, char** argv, dim3 screen_res, glm::vec3 camPos,
       }
     }
 
+    // update time delta
+    Uint32 time = SDL_GetTicks();
+    float timeDelta = (time - lastTime) / 1000.0f;
+    lastTime = time;
+
     // get input state
     int mx, my;
     Uint32 mb = SDL_GetMouseState(&mx, &my);
@@ -250,17 +256,17 @@ int runInWindow(int argc, char** argv, dim3 screen_res, glm::vec3 camPos,
 
     if (!ImGui::GetIO().WantCaptureKeyboard) {
       if (keys[SDL_SCANCODE_W])
-        camPos -= 0.01f * glm::mat3(camRotMat) * glm::vec3(0.0f, 0.0f, 1.0f);
+        camPos -= timeDelta * glm::mat3(camRotMat) * glm::vec3(0.0f, 0.0f, 1.0f);
       if (keys[SDL_SCANCODE_S])
-        camPos += 0.01f * glm::mat3(camRotMat) * glm::vec3(0.0f, 0.0f, 1.0f);
+        camPos += timeDelta * glm::mat3(camRotMat) * glm::vec3(0.0f, 0.0f, 1.0f);
       if (keys[SDL_SCANCODE_A])
-        camPos -= 0.01f * glm::mat3(camRotMat) * glm::vec3(1.0f, 0.0f, 0.0f);
+        camPos -= timeDelta * glm::mat3(camRotMat) * glm::vec3(1.0f, 0.0f, 0.0f);
       if (keys[SDL_SCANCODE_D])
-        camPos += 0.01f * glm::mat3(camRotMat) * glm::vec3(1.0f, 0.0f, 0.0f);
+        camPos += timeDelta * glm::mat3(camRotMat) * glm::vec3(1.0f, 0.0f, 0.0f);
       if (keys[SDL_SCANCODE_Q])
-        camPos -= 0.01f * glm::mat3(camRotMat) * glm::vec3(0.0f, 1.0f, 0.0f);
+        camPos -= timeDelta * glm::mat3(camRotMat) * glm::vec3(0.0f, 1.0f, 0.0f);
       if (keys[SDL_SCANCODE_E])
-        camPos += 0.01f * glm::mat3(camRotMat) * glm::vec3(0.0f, 1.0f, 0.0f);
+        camPos += timeDelta * glm::mat3(camRotMat) * glm::vec3(0.0f, 1.0f, 0.0f);
     }
 
     // call render function
@@ -275,19 +281,6 @@ int runInWindow(int argc, char** argv, dim3 screen_res, glm::vec3 camPos,
     GLuint err = glGetError();
     if (err != GL_NO_ERROR) {
       fprintf(stderr, "OpenGL error: %x\n", err);
-    }
-
-    // update fps counter
-    ++frames;
-    uint32_t time = SDL_GetTicks();
-    if (time - lastUpdate >= 1000) {
-      // add 1000 to fps, or more than 1000 if more than a second elapsed somehow..
-      lastUpdate += 1000 * ((time - lastUpdate) / 1000);
-      fps = frames;
-      frames = 0;
-      char buf[255];
-      sprintf_s(buf, "%d", fps);
-      SDL_SetWindowTitle(window, buf);
     }
   }
 

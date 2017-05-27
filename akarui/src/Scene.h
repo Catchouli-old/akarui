@@ -254,6 +254,7 @@ struct Scene
       }
 
       // for each vertex, average the normals of the connected faces
+      if (false)
       for (int i = 0; i < data.nrm.size(); ++i) {
         std::vector<glm::vec3> normalsToAvg;
         for (int j = 0; j < data.idx.size()/3; ++j) {

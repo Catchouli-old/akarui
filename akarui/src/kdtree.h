@@ -39,13 +39,15 @@ public:
   int m_primCount = 0;
   KdtreeNode* m_ropes[6] = { 0 };
   AABB m_aabb;
+  int m_splitAxis;
+  float m_splitPosObj;
 
 private:
   friend class Kdtree;
 
   void buildNode(const glm::vec3* pos, const std::vector<prim>& idx, const AABB& aabb, int depth);
 
-  void generateRopes(const std::array<KdtreeNode*, 6>& ropes);
+  void generateRopes(std::array<KdtreeNode*, 6> ropes);
 };
 
 class Kdtree
