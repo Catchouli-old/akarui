@@ -64,8 +64,8 @@ int SDL_main(int argc, char** argv)
     //scene.load("meshes/head", "head.obj");
     //scene.load("resources/testObj", "testObj.obj");
     //scene.load("resources/teapot", "teapot.obj");
-    //scene.load("stanford", "bunny.obj");
-    scene.load(".", "teapot.obj");
+    scene.load("stanford", "bunny.obj");
+    //scene.load(".", "teapot.obj");
 
     // load shader
     program = compileShaderProgram("resources/shaders/textured.glsl");
@@ -90,7 +90,12 @@ int SDL_main(int argc, char** argv)
   auto render = [&](const glm::vec3& camPos, const glm::mat3 camRot) {
     auto time = SDL_GetTicks() / 1000.0f;
 
-    glm::vec3 forward = glm::vec3(0.0f, 0.0f, -1.0f) * camRot;
+    glm::vec3 forward = camRot * glm::vec3(0.0f, 0.0f, -1.0f);
+
+    if (SDL_GetKeyboardState(nullptr)[SDL_SCANCODE_F1]) {
+      origin = camPos;
+      direction = forward;
+    }
 
     ImGui::Begin("Render stats");
     ss.str(""); ss << "Camera pos: " << camPos.x << " " << camPos.y << " " << camPos.z;
@@ -289,11 +294,14 @@ int SDL_main(int argc, char** argv)
     glm::vec2 tmp;
     glm::vec2 entryExit;
     KdtreeNode* node = kdtree->m_root;
+    int blarg = 0;
+    int flarg = 0;
     if (intersectRayAABB(kdtree->m_aabb, origin, direction, entryExit)) {
       while (entryExit.x < entryExit.y) {
         // down traversal (until we get to a leaf)
         glm::vec3 pEntry = origin + entryExit.x * direction;
         while (node->m_left) {
+          ++blarg;
           float pEntrySplitAxis = pEntry[node->m_splitAxis];
           // <=? does it matter?
           node = (pEntrySplitAxis < node->m_splitPosObj ? node->m_left : node->m_right);
@@ -312,6 +320,7 @@ int SDL_main(int argc, char** argv)
         cube();
         glEnd();
         glPopMatrix();
+        flarg++;
 
         // exit the leaf using a rope
         int exitFace;
@@ -323,6 +332,7 @@ int SDL_main(int argc, char** argv)
           break;
       }
     }
+    printf("downtraversals: %d, leaves visited: %d\n", blarg, flarg);
 
     glPopAttrib();
 #endif

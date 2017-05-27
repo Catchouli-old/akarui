@@ -48,6 +48,7 @@ private:
   void buildNode(const glm::vec3* pos, const std::vector<prim>& idx, const AABB& aabb, int depth);
 
   void generateRopes(std::array<KdtreeNode*, 6> ropes);
+  static void optimizeRopes(std::array<KdtreeNode*, 6>& ropes, const AABB& aabb);
 };
 
 class Kdtree

@@ -187,9 +187,7 @@ void KdtreeNode::generateRopes(std::array<KdtreeNode*, 6> ropes)
     memcpy(m_ropes, ropes.data(), 6 * sizeof(KdtreeNode*));
   }
   else {
-    for (int i = 0; i < 6; ++i) {
-      // todo: optimize ropes here
-    }
+    optimizeRopes(ropes, m_aabb);
 
     // create child ropes
     std::array<KdtreeNode*, 6> leftRopes;
@@ -210,5 +208,36 @@ void KdtreeNode::generateRopes(std::array<KdtreeNode*, 6> ropes)
     // recurse
     m_left->generateRopes(leftRopes);
     m_right->generateRopes(rightRopes);
+  }
+}
+
+void KdtreeNode::optimizeRopes(std::array<KdtreeNode*, 6>& ropes, const AABB& aabb)
+{
+  // loop through each face of the node's bounding box
+  for (int i = 0; i < 6; ++i) {
+    KdtreeNode*& link = ropes[i];
+
+    if (link == nullptr)
+      continue;
+
+    // Push link down the tree as far as possible
+    // while not a leaf
+    while (link->m_left) {
+      int axis = i / 2;
+
+      // Case where split plane is parallel to this axis
+      if (link->m_splitAxis == axis) {
+        link = (i == axis*2 ? link->m_right : link->m_left);
+      }
+      // Other axes
+      else {
+        if (link->m_splitPosObj < (aabb.getMin()[link->m_splitAxis]))
+          link = link->m_right;
+        else if (link->m_splitPosObj > (aabb.getMax()[link->m_splitAxis]))
+          link = link->m_left;
+        else
+          break;
+      }
+    }
   }
 }
