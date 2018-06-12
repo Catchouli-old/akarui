@@ -8,8 +8,7 @@
 #include <fstream>
 #include <string>
 #include <sstream>
-#include "cuda_runtime.h"
-#include "cuda_gl_interop.h"
+//#include "cuda_gl_interop.h"
 #include "kernel.h"
 #include "Scene.h"
 #include "imgui.h"
@@ -21,7 +20,7 @@ void drawFullscreenQuad();
 GLuint createTexture(int width, int height);
 GLuint compileShaderProgram(const char* filename);
 
-int runInWindow(int argc, char** argv, dim3 screen_res, glm::vec3 camPos,
+int runInWindow(int argc, char** argv, glm::ivec3 screen_res, glm::vec3 camPos,
   std::function<void()> initFunc, std::function<void(glm::vec3, glm::mat3)> drawFunc)
 {
   // parse command line
@@ -286,11 +285,11 @@ int runInWindow(int argc, char** argv, dim3 screen_res, glm::vec3 camPos,
 
   // cudaDeviceReset must be called before exiting in order for profiling and
   // tracing tools such as Nsight and Visual Profiler to show complete traces.
-  cudaError_t cudaStatus = cudaDeviceReset();
-  if (cudaStatus != cudaSuccess) {
-      fprintf(stderr, "cudaDeviceReset failed!");
-      return 1;
-  }
+  //cudaError_t cudaStatus = cudaDeviceReset();
+  //if (cudaStatus != cudaSuccess) {
+      //fprintf(stderr, "cudaDeviceReset failed!");
+      //return 1;
+  //}
 
   // Clean up SDL
   SDL_DestroyRenderer(renderer);

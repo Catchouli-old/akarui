@@ -1,7 +1,7 @@
 #pragma once
 
 #include <glm/glm.hpp>
-#include "cuda_runtime.h"
+//#include "cuda_runtime.h"
 #include "tiny_obj_loader.h"
 #include "kdtree.h"
 #include <vector>
@@ -11,8 +11,8 @@ template <typename T>
 T* cudaCopyArray(T* arr, int count)
 {
   T* devPtr = nullptr;
-  cudaMalloc(&devPtr, sizeof(T) * count);
-  cudaMemcpy(devPtr, arr, sizeof(T) * count, cudaMemcpyHostToDevice);
+  //cudaMalloc(&devPtr, sizeof(T) * count);
+  //cudaMemcpy(devPtr, arr, sizeof(T) * count, cudaMemcpyHostToDevice);
   return devPtr;
 }
 
@@ -22,7 +22,7 @@ struct Material
 {
   Material() {}
 
-  __device__ Material(glm::vec3 Ka, glm::vec3 Kd, glm::vec3 Ks, float Ns)
+  Material(glm::vec3 Ka, glm::vec3 Kd, glm::vec3 Ks, float Ns)
     : Ka(Ka), Kd(Kd), Ks(Ks), Ns(Ns) {}
 
   glm::vec3 Ka = glm::vec3(0.0f); //^ ambient reflectance
@@ -68,8 +68,8 @@ struct Mesh
     mesh->kdtree = kdtree->cudaCopy();
 
     Mesh* devPtr = nullptr;
-    cudaMalloc(&devPtr, sizeof(Mesh));
-    cudaMemcpy(devPtr, mesh, sizeof(Mesh), cudaMemcpyHostToDevice);
+    //cudaMalloc(&devPtr, sizeof(Mesh));
+    //cudaMemcpy(devPtr, mesh, sizeof(Mesh), cudaMemcpyHostToDevice);
 
     free(mesh);
 
@@ -80,16 +80,16 @@ struct Mesh
   {
     Mesh* mesh = (Mesh*)malloc(sizeof(Mesh));
 
-    cudaMemcpy(mesh, devPtr, sizeof(Mesh), cudaMemcpyDeviceToHost);
+    //cudaMemcpy(mesh, devPtr, sizeof(Mesh), cudaMemcpyDeviceToHost);
 
-    ::cudaFree(mesh->pos);
-    ::cudaFree(mesh->nrm);
-    ::cudaFree(mesh->uv);
-    ::cudaFree(mesh->mat);
-    ::cudaFree(mesh->idx);
-    ::cudaFree(mesh->matIdx);
+    //::cudaFree(mesh->pos);
+    //::cudaFree(mesh->nrm);
+    //::cudaFree(mesh->uv);
+    //::cudaFree(mesh->mat);
+    //::cudaFree(mesh->idx);
+    //::cudaFree(mesh->matIdx);
     Kdtree::cudaFree(mesh->kdtree);
-    ::cudaFree(devPtr);
+    //::cudaFree(devPtr);
 
     free(mesh);
   }
@@ -318,13 +318,13 @@ struct Scene
     scene->lights = cudaCopyArray(lights, lightCount);
 
     Mesh** devMeshes = nullptr;
-    cudaMalloc(&devMeshes, sizeof(Mesh*) * meshCount);
-    cudaMemcpy(devMeshes, cudaMeshes, sizeof(Mesh*) * meshCount, cudaMemcpyHostToDevice);
+    //cudaMalloc(&devMeshes, sizeof(Mesh*) * meshCount);
+    //cudaMemcpy(devMeshes, cudaMeshes, sizeof(Mesh*) * meshCount, cudaMemcpyHostToDevice);
     scene->meshes = devMeshes;
 
     Scene* devPtr = nullptr;
-    cudaMalloc(&devPtr, sizeof(Scene));
-    cudaMemcpy(devPtr, scene, sizeof(Scene), cudaMemcpyHostToDevice);
+    //cudaMalloc(&devPtr, sizeof(Scene));
+    //cudaMemcpy(devPtr, scene, sizeof(Scene), cudaMemcpyHostToDevice);
 
     free(scene);
 
@@ -334,16 +334,16 @@ struct Scene
   static void cudaFree(Scene* devPtr)
   {
     Scene* scene = (Scene*)malloc(sizeof(Scene));
-    cudaMemcpy(scene, devPtr, sizeof(Scene), cudaMemcpyDeviceToHost);
+    //cudaMemcpy(scene, devPtr, sizeof(Scene), cudaMemcpyDeviceToHost);
 
     Mesh** meshes = (Mesh**)malloc(sizeof(Mesh*) * scene->meshCount);
-    cudaMemcpy(meshes, scene->meshes, sizeof(Mesh*) * scene->meshCount, cudaMemcpyDeviceToHost);
+    //cudaMemcpy(meshes, scene->meshes, sizeof(Mesh*) * scene->meshCount, cudaMemcpyDeviceToHost);
 
     for (int i = 0; i < scene->meshCount; ++i) {
       Mesh::cudaFree(scene->meshes[i]);
     }
-    ::cudaFree(scene->lights);
-    ::cudaFree(devPtr);
+    //::cudaFree(scene->lights);
+    //::cudaFree(devPtr);
 
     free(scene);
     free(meshes);
@@ -353,14 +353,14 @@ struct Scene
   {
     // update just the parts that are likely to change
     Scene* copy = (Scene*)malloc(sizeof(Scene));
-    cudaMemcpy(copy, devPtr, sizeof(Scene), cudaMemcpyDeviceToHost);
+    //cudaMemcpy(copy, devPtr, sizeof(Scene), cudaMemcpyDeviceToHost);
 
     copy->Ia = Ia;
     copy->lightCount = lightCount;
-    ::cudaFree(copy->lights);
-    copy->lights = cudaCopyArray(lights, lightCount);
+    //::cudaFree(copy->lights);
+    //copy->lights = cudaCopyArray(lights, lightCount);
 
-    cudaMemcpy(devPtr, copy, sizeof(Scene), cudaMemcpyHostToDevice);
+    //cudaMemcpy(devPtr, copy, sizeof(Scene), cudaMemcpyHostToDevice);
     free(copy);
   }
 

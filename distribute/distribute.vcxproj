@@ -65,6 +65,22 @@ cd "$(SolutionDir)"
 
 rmdir /s /q "%folder%"</Command>
     </PostBuildEvent>
+    <PreLinkEvent>
+      <Command>for /F "usebackq tokens=1,2 delims==" %%i in (`wmic os get LocalDateTime /VALUE 2^&gt;NUL`) do if '.%%i.'=='.LocalDateTime.' set ldt=%%j
+set ldt=%ldt:~0,4%-%ldt:~4,2%-%ldt:~6,2%__%ldt:~8,2%_%ldt:~10,2%_%ldt:~12,6%
+set filename=$(SolutionName)_%ldt%
+set folder="$(SolutionDir)%filename%"
+
+mkdir "$(SolutionDir)%filename%"
+mklink /J "%folder%\resources" "$(SolutionDir)dist\resources"
+mklink /H "%folder%\akarui.exe" "$(OutDir)akarui.exe"
+copy "$(SolutionDir)dependencies\bin\*.dll" "%folder%"
+
+cd "$(SolutionDir)"
+"$(SolutionDir)dependencies\tools\zip" -r "$(SolutionDir)distribute\%filename%.zip" "%filename%"
+
+rmdir /s /q "%folder%"</Command>
+    </PreLinkEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
@@ -95,6 +111,22 @@ cd "$(SolutionDir)"
 
 rmdir /s /q "%folder%"</Command>
     </PostBuildEvent>
+    <PreLinkEvent>
+      <Command>for /F "usebackq tokens=1,2 delims==" %%i in (`wmic os get LocalDateTime /VALUE 2^&gt;NUL`) do if '.%%i.'=='.LocalDateTime.' set ldt=%%j
+set ldt=%ldt:~0,4%-%ldt:~4,2%-%ldt:~6,2%__%ldt:~8,2%_%ldt:~10,2%_%ldt:~12,6%
+set filename=$(SolutionName)_%ldt%
+set folder="$(SolutionDir)%filename%"
+
+mkdir "$(SolutionDir)%filename%"
+mklink /J "%folder%\resources" "$(SolutionDir)dist\resources"
+mklink /H "%folder%\akarui.exe" "$(OutDir)akarui.exe"
+copy "$(SolutionDir)dependencies\bin\*.dll" "%folder%"
+
+cd "$(SolutionDir)"
+"$(SolutionDir)dependencies\tools\zip" -r "$(SolutionDir)distribute\%filename%.zip" "%filename%"
+
+rmdir /s /q "%folder%"</Command>
+    </PreLinkEvent>
   </ItemDefinitionGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

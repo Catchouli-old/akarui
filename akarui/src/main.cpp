@@ -35,12 +35,12 @@ void cube() {
 int SDL_main(int argc, char** argv)
 {
   // screen res
-  dim3 screen_res(800, 600);
+  glm::ivec3 screen_res(800, 600, 1);
   glm::vec3 camPos(-0.5f, 1.0f, 10.5f);// 3.5f);
 
   // resources
   GLuint tex;
-  cudaGraphicsResource_t cudaResource;
+  //cudaGraphicsResource_t cudaResource;
   Scene scene;
   Scene* sceneDevPtr;
   GLuint program;
@@ -57,7 +57,7 @@ int SDL_main(int argc, char** argv)
     // create render target
     tex = createTexture(screen_res.x, screen_res.y);
     glBindTexture(GL_TEXTURE_2D, tex);
-    cudaGraphicsGLRegisterImage(&cudaResource, tex, GL_TEXTURE_2D, cudaGraphicsRegisterFlagsWriteDiscard);
+    //cudaGraphicsGLRegisterImage(&cudaResource, tex, GL_TEXTURE_2D, cudaGraphicsRegisterFlagsWriteDiscard);
 
     // load scene
     //scene.load("resources/cornell-box", "CornellBox-Original.obj");
@@ -111,6 +111,7 @@ int SDL_main(int argc, char** argv)
     scene.cudaUpdate(sceneDevPtr);
 
     // map texture into cuda and invoke render kernel
+    /*
     cudaGraphicsMapResources(1, &cudaResource);
     {
       cudaArray_t cudaArray;
@@ -133,6 +134,7 @@ int SDL_main(int argc, char** argv)
       cudaDestroySurfaceObject(cudaSurfaceObject);
     }
     cudaGraphicsUnmapResources(1, &cudaResource);
+    */
 
     // render texture to screen
     glBindTexture(GL_TEXTURE_2D, tex);
@@ -337,7 +339,7 @@ int SDL_main(int argc, char** argv)
     glPopAttrib();
 #endif
 
-    cudaStreamSynchronize(0);
+    //cudaStreamSynchronize(0);
   };
 
   // Run window

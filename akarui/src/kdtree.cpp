@@ -1,6 +1,5 @@
 #include "kdtree.h"
 
-#include "cuda_runtime.h"
 #include <functional>
 #include <vector>
 #include <map>
@@ -134,7 +133,7 @@ Kdtree* Kdtree::cudaCopy()
 
   // allocate memory and copy data
   Kdtree* ptr;
-  cudaMalloc(&ptr, spaceReq);
+  //cudaMalloc(&ptr, spaceReq);
 
   KdtreeNode* nodeStart = reinterpret_cast<KdtreeNode*>(ptr + 1);
   prim* primStart = reinterpret_cast<prim*>(nodeStart + nodes.size());
@@ -151,17 +150,17 @@ Kdtree* Kdtree::cudaCopy()
   }
 
   // copy data
-  cudaMemcpy(ptr, &tree, sizeof(Kdtree), cudaMemcpyHostToDevice);
+  //cudaMemcpy(ptr, &tree, sizeof(Kdtree), cudaMemcpyHostToDevice);
 
   int i = 0;
   for (auto it = nodes.begin(); it != nodes.end(); ++it) {
-    cudaMemcpy(nodeStart + i, &*it, sizeof(KdtreeNode), cudaMemcpyHostToDevice);
+    //cudaMemcpy(nodeStart + i, &*it, sizeof(KdtreeNode), cudaMemcpyHostToDevice);
     ++i;
   }
   
   prim* curPrim = primStart;
   for (auto it = nodes.begin(); it != nodes.end(); ++it) {
-    cudaMemcpy(curPrim, it->second->m_prims, it->second->m_primCount * sizeof(prim), cudaMemcpyHostToDevice);
+    //cudaMemcpy(curPrim, it->second->m_prims, it->second->m_primCount * sizeof(prim), cudaMemcpyHostToDevice);
   }
 
   // free temporary memory
@@ -177,7 +176,7 @@ Kdtree* Kdtree::cudaCopy()
 void Kdtree::cudaFree(Kdtree* ptr)
 {
   // it should all be stored in one big memory block
-  ::cudaFree(ptr);
+  //::cudaFree(ptr);
 }
 
 void KdtreeNode::generateRopes(std::array<KdtreeNode*, 6> ropes)
